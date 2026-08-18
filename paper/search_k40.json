@@ -1,0 +1,167 @@
+[
+  {
+    "generation": 1,
+    "candidate": "hybrid_temporal_retrieve_iter1",
+    "parent": "hybrid_router_rag + temporal_redistribute_simple",
+    "dev_accuracy": 39.7,
+    "promoted": false,
+    "axis": "exploration",
+    "visual_tokens": 9647.0,
+    "runtime_seconds": 377.9,
+    "source_shipped": false
+  },
+  {
+    "generation": 1,
+    "candidate": "caption_navigate_verify_iter1",
+    "parent": "caption_then_look + episodic_narrative_memory",
+    "dev_accuracy": 43.4,
+    "promoted": false,
+    "axis": "exploitation",
+    "visual_tokens": 10347.0,
+    "runtime_seconds": 652.28,
+    "source_shipped": false
+  },
+  {
+    "generation": 1,
+    "candidate": "option_contrastive_retrieve_iter1",
+    "parent": "keyframe_image_rag + hybrid_router_rag",
+    "dev_accuracy": 41.1,
+    "promoted": false,
+    "axis": "exploration",
+    "visual_tokens": 10347.0,
+    "runtime_seconds": 384.71,
+    "source_shipped": false
+  },
+  {
+    "generation": 2,
+    "candidate": "motion_adaptive_navigate_iter2",
+    "parent": "caption_navigate_verify_iter1",
+    "dev_accuracy": 41.7,
+    "promoted": false,
+    "axis": "exploration",
+    "visual_tokens": 10347.0,
+    "runtime_seconds": 1426.74,
+    "source_shipped": false
+  },
+  {
+    "generation": 2,
+    "candidate": "discriminative_verify_iter2",
+    "parent": "caption_navigate_verify_iter1",
+    "dev_accuracy": 42.6,
+    "promoted": false,
+    "axis": "exploitation",
+    "visual_tokens": 10347.0,
+    "runtime_seconds": 1050.01,
+    "source_shipped": false
+  },
+  {
+    "generation": 2,
+    "candidate": "embed_navigate_hybrid_iter2",
+    "parent": "caption_navigate_verify_iter1 + hybrid_router_rag",
+    "dev_accuracy": 48.6,
+    "promoted": false,
+    "axis": "exploitation",
+    "visual_tokens": 10347.0,
+    "runtime_seconds": 1052.07,
+    "source_shipped": true
+  },
+  {
+    "generation": 3,
+    "candidate": "coarse_fine_navigate_iter3",
+    "parent": "embed_navigate_hybrid_iter2",
+    "dev_accuracy": 42.3,
+    "promoted": false,
+    "axis": "exploitation",
+    "visual_tokens": 10347.0,
+    "runtime_seconds": 302.08,
+    "source_shipped": false
+  },
+  {
+    "generation": 3,
+    "candidate": "temporal_direction_retrieve_iter3",
+    "parent": "embed_navigate_hybrid_iter2",
+    "dev_accuracy": 45.7,
+    "promoted": false,
+    "axis": "exploitation",
+    "visual_tokens": 10347.0,
+    "runtime_seconds": 381.17,
+    "source_shipped": false
+  },
+  {
+    "generation": 3,
+    "candidate": "entity_scene_structured_iter3",
+    "parent": "embed_navigate_hybrid_iter2",
+    "dev_accuracy": 44.6,
+    "promoted": false,
+    "axis": "exploration",
+    "visual_tokens": 10347.0,
+    "runtime_seconds": 303.65,
+    "source_shipped": false
+  },
+  {
+    "generation": 4,
+    "candidate": "navigate_reason_hybrid_iter4",
+    "parent": "embed_navigate_hybrid_iter2",
+    "dev_accuracy": 46.3,
+    "promoted": false,
+    "axis": "exploitation",
+    "visual_tokens": 10347.0,
+    "runtime_seconds": 453.8,
+    "source_shipped": false
+  },
+  {
+    "generation": 4,
+    "candidate": "reasoning_query_boost_iter4",
+    "parent": "embed_navigate_hybrid_iter2",
+    "dev_accuracy": 46.6,
+    "promoted": false,
+    "axis": "exploitation",
+    "visual_tokens": 10347.0,
+    "runtime_seconds": 374.31,
+    "source_shipped": false
+  },
+  {
+    "generation": 4,
+    "candidate": "activity_density_router_iter4",
+    "parent": "embed_navigate_hybrid_iter2",
+    "dev_accuracy": 44.3,
+    "promoted": false,
+    "axis": "exploration",
+    "visual_tokens": 6785.0,
+    "runtime_seconds": 346.49,
+    "source_shipped": false
+  },
+  {
+    "generation": 5,
+    "candidate": "caption_embed_dual_iter5",
+    "parent": "embed_navigate_hybrid_iter2",
+    "dev_accuracy": 41.7,
+    "promoted": false,
+    "axis": "exploitation",
+    "visual_tokens": 10347.0,
+    "runtime_seconds": 395.58,
+    "source_shipped": false
+  },
+  {
+    "generation": 5,
+    "candidate": "annotated_temporal_answer_iter5",
+    "parent": "embed_navigate_hybrid_iter2",
+    "dev_accuracy": 45.1,
+    "promoted": false,
+    "axis": "exploration",
+    "visual_tokens": 7760.0,
+    "runtime_seconds": 296.3,
+    "source_shipped": false
+  },
+  {
+    "generation": 5,
+    "candidate": "mmr_relevance_diverse_iter5",
+    "parent": "embed_navigate_hybrid_iter2",
+    "dev_accuracy": 48.0,
+    "promoted": false,
+    "axis": "exploitation",
+    "visual_tokens": 10347.0,
+    "runtime_seconds": 393.24,
+    "source_shipped": false
+  }
+]

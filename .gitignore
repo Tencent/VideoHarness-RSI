@@ -1,0 +1,31 @@
+# Runtime artifacts
+setenv.sh
+.env
+.env.*
+data/
+**/logs/**
+!**/logs/.gitignore
+**/results/**
+!**/results/.gitignore
+**/experience/**
+!**/experience/.gitignore
+**/.vlm_cache/
+**/.frame_cache/
+*.mp4
+*.mkv
+*.avi
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

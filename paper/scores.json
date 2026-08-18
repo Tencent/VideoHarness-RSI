@@ -1,0 +1,42 @@
+{
+  "protocol": {
+    "inner_vlm": "Qwen3-VL-8B-Instruct",
+    "embedder": "clip-ViT-B-32",
+    "K": 40,
+    "seed": 42,
+    "temperature": 0.0,
+    "lvbench": "83 local videos / 1232 QA subset, shuffle seed 42, val 350 + held-out 882. Not full LVBench.",
+    "held_out_rule": "Official held-out is results[350:] of a 1232-pool run (num_train=0, num_val=0, num_test=1232). Do not quote the file-level accuracy of that 1232 JSON as held-out."
+  },
+  "lvbench": {
+    "pilot_uniform_k": {
+      "dev_350": {"correct": 126, "total": 350, "accuracy_pct": 36.0, "note": "k40-evolution seed. Phase-0 / table uses 127/350 = 36.3."},
+      "held_out_882": {"correct": 320, "total": 882, "accuracy_pct": 36.3}
+    },
+    "aks": {
+      "dev_350": {"correct": 174, "total": 350, "accuracy_pct": 49.7},
+      "held_out_882": {"correct": 410, "total": 882, "accuracy_pct": 46.5}
+    },
+    "embed_navigate_hybrid_iter2": {
+      "dev_350_search": {"correct": 170, "total": 350, "accuracy_pct": 48.6, "note": "k40-evolution val.json"},
+      "dev_350_table": {"correct": 169, "total": 350, "accuracy_pct": 48.3, "note": "re-eval used in the paper table"},
+      "held_out_882": {"correct": 400, "total": 882, "accuracy_pct": 45.4}
+    },
+    "timestamped_aks_iter5": {
+      "dev_350": {"correct": 182, "total": 350, "accuracy_pct": 52.0, "note": "Same val as aks_anchor_bypass_iter2. All +2.3pp vs AKS is the iter2 clock bypass; iter5 only adds [Xs] timestamps and wins Pareto on visual tokens (8830 vs 8878)."},
+      "held_out_882": {"correct": 444, "total": 882, "accuracy_pct": 50.3, "note": "Paired 882 eval vs aks. Raw test.json is not bundled."}
+    }
+  },
+  "transfer": {
+    "video_mme_2700": {
+      "pilot_uniform_k": {"correct": 1618, "total": 2700, "accuracy_pct": 59.9},
+      "embed_navigate_hybrid_iter2": {"correct": 1661, "total": 2700, "accuracy_pct": 61.5},
+      "aks": {"correct": 1805, "total": 2700, "accuracy_pct": 66.9}
+    },
+    "mlvu_2174": {
+      "pilot_uniform_k": {"correct": 1373, "total": 2174, "accuracy_pct": 63.2},
+      "embed_navigate_hybrid_iter2": {"correct": 1433, "total": 2174, "accuracy_pct": 65.9},
+      "aks": {"correct": 1566, "total": 2174, "accuracy_pct": 72.0}
+    }
+  }
+}

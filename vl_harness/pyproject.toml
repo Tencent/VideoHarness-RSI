@@ -1,0 +1,20 @@
+[project]
+name = "vl-harness-rsi"
+version = "0.1.0"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml",
+    "numpy",
+    "litellm==1.84.10",
+    "tenacity>=8",
+    "tqdm",
+    "opencv-python-headless>=4.10",
+    "pillow>=10",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+exclude = ["agents"]
