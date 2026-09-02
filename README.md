@@ -18,14 +18,18 @@ Frozen inner VLM. CLIP `clip-ViT-B-32` for AKS / hybrid. Exact counts: [`paper/s
 
 ### LVBench subset (K=40)
 
-| Harness | Dev 350 | Held-out 882 |
-|---|---:|---:|
-| Uniform `pilot_uniform_k` | 36.0 search / **36.3** table | **36.3** (320/882) |
-| AKS `aks` | **49.7** | **46.5** (410/882) |
-| k40 champion `embed_navigate_hybrid_iter2` | 48.6 search / **48.3** table | **45.4** (400/882) |
-| AKS-run champion `timestamped_aks_iter5` | **52.0** | **50.3** (444/882) |
+**Avg. frames** counts visual frames shown across requests, not only the K=40 answer-time pack. **Avg. input tokens** is visual plus auxiliary text per question (held-out when available).
 
-`timestamped_aks_iter5` is the *report* champion of the AKS-seeded run. The +2.3pp val jump vs AKS is `aks_anchor_bypass_iter2` (clock bypass). Iter5 keeps 52.0 and adds `[Xs]` timestamps; it is Pareto-preferred on visual tokens, not a second accuracy jump.
+| Harness | Dev 350 | Held-out 882 | Avg. frames | Avg. input tokens |
+|---|---:|---:|---:|---:|
+| Uniform `pilot_uniform_k` | 36.0 search / **36.3** table | **36.3** (320/882) | 40.0 | 10,407 |
+| AKS `aks` | **49.7** | **46.5** (410/882) | 40.0 | 8,744 |
+| k40 hybrid `embed_navigate_hybrid_iter2` | 48.6 search / **48.3** table | **45.4** (400/882) | 40.0 | 16,898 |
+| Clock F_t `stated_time_address_decode_iter9` | **50.9** (178/350) | **48.9** (432/882) | 40.0 | 10,005 |
+| AKS-run `timestamped_aks_iter5` | **52.0** | **50.3** (444/882) | ~40 | 9,418 |
+| **CardinalityLedger** | **58.3** (204/350) | **54.8** (483/882) | 89.5 | 19,210 |
+
+Clock F_t is the k40-evolution champion (uniform parent). Held-out cost is 39.97 frames / 10,005 tokens; development is 40.0 / 9,962. `timestamped_aks_iter5` is the *report* champion of an earlier AKS-seeded run: the +2.3pp val jump vs AKS is `aks_anchor_bypass_iter2` (clock bypass); iter5 keeps 52.0 and adds `[Xs]` timestamps (Pareto on visual tokens, not a second accuracy jump). CardinalityLedger is the later AKS-parent search champion.
 
 AKS here is a matched-K selector (CLIP-B/32, 320-frame @ 2 fps pool). It is not a reproduction of the AKS paper's BLIP-ITM / 1 fps tables. See the header of `vl_harness/agents/aks.py`.
 
@@ -93,7 +97,8 @@ Phase 0 of that config evaluates Uniform and AKS only. Re-eval the two champions
 
 ```text
 vl_harness/           # package
-  config_k40.yaml     # default paper protocol
+  config_k40.yaml     # default paper protocol (350/882)
+  config.yaml         # legacy generic split (200/1032; Appendix G)
   harness.py          # VideoMemoryHarness
   inner_loop.py / meta_harness.py
   agents/             # paper systems + seed sketches

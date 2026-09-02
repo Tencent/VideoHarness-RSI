@@ -25,6 +25,30 @@
     "timestamped_aks_iter5": {
       "dev_350": {"correct": 182, "total": 350, "accuracy_pct": 52.0, "note": "Same val as aks_anchor_bypass_iter2. All +2.3pp vs AKS is the iter2 clock bypass; iter5 only adds [Xs] timestamps and wins Pareto on visual tokens (8830 vs 8878)."},
       "held_out_882": {"correct": 444, "total": 882, "accuracy_pct": 50.3, "note": "Paired 882 eval vs aks. Raw test.json is not bundled."}
+    },
+    "stated_time_address_decode_iter9": {
+      "dev_350": {
+        "correct": 178,
+        "total": 350,
+        "accuracy_pct": 50.9,
+        "avg_frames": 40.0,
+        "visual_tokens": 9962,
+        "note": "k40-evolution F_t (clock). 178/350."
+      },
+      "held_out_882": {
+        "correct": 432,
+        "total": 882,
+        "accuracy_pct": 48.9,
+        "avg_frames": 39.97,
+        "visual_tokens": 10005,
+        "note": "432/882. Table uses held-out tokens (10,005) and rounds frames to 40.0."
+      }
+    },
+    "cardinality_ledger": {
+      "dev_350": {"correct": 204, "total": 350, "accuracy_pct": 58.3, "note": "rsi-C-aks-blind-q350 clan-off 10x1 F_t"},
+      "held_out_882": {"correct": 483, "total": 882, "accuracy_pct": 54.8},
+      "avg_frames_heldout": 89.45,
+      "visual_tokens_heldout": 19210
     }
   },
   "transfer": {

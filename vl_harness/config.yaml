@@ -1,8 +1,8 @@
-# Identical to config_k40.yaml. Kept so older scripts that hardcode this
-# filename still run the paper protocol (K=40, val 350 / test 882).
-# Prefer VL_HARNESS_CONFIG=config_k40.yaml.
+# Generic / legacy config (Appendix G): LVBench val 200 / test 1032.
+# Main paper numbers use config_k40.yaml (val 350 / test 882). Prefer that file
+# via VL_HARNESS_CONFIG or `meta_harness --config config_k40.yaml`.
 run:
-  name: paper-k40
+  name: default-200-1032
   iterations: 5
   skip_baseline: false
   fresh: false
@@ -28,8 +28,8 @@ dataset:
       num_test: 4000
     lvbench:
       num_train: 0
-      num_val: 350
-      num_test: 882
+      num_val: 200
+      num_test: 1032
 inner_loop:
   mode: offline
   num_epochs: 1

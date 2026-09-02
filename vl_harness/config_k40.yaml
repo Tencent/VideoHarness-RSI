@@ -1,7 +1,8 @@
-# Paper protocol. This is the default config (also copied to config.yaml).
+# Main paper protocol (default via setenv / meta_harness).
 # K=40, LVBench 0/350/882, seed 42, temperature 0.
 # Do not change the LVBench split without renaming the run — that is a
 # different experiment from the numbers in README.md.
+# Generic config.yaml uses the legacy 200/1032 split (Appendix G).
 run:
   name: paper-k40
   iterations: 5
