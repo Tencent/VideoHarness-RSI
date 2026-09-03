@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Recompute LVBench table counts from per-question dumps. No VLM."""
+"""Recompute main-table counts from per-question dumps. No VLM."""
 
 from __future__ import annotations
 
@@ -9,38 +9,37 @@ import sys
 from pathlib import Path
 
 ROWS = [
-    ("held-out", "AKS", "dumps/table_heldout/aks/held882.json", 411, 882),
-    (
-        "held-out",
-        "StatedTimeAddressDecode",
-        "dumps/table_heldout/stated_time_address_decode_iter9/held882.json",
-        432,
-        882,
-    ),
+    ("held-out", "AKS", "dumps/aks/held882.json", 411, 882),
+    ("held-out", "WeakFT", "dumps/weakft/held882.json", 432, 882),
     (
         "held-out",
         "CardinalityLedger",
-        "dumps/table_heldout/cardinality_ledger/held882.json",
+        "dumps/cardinality_ledger/held882.json",
         483,
         882,
     ),
-    ("held-out", "AKS-90", "dumps/table_heldout/aks_k90/held882.json", 434, 882),
-    ("dev", "AKS", "dumps/table_dev350/aks/val.json", 174, 350),
+    ("held-out", "AKS-90", "dumps/aks90/held882.json", 434, 882),
+    ("held-out", "Uniform", "dumps/uniform/held882.json", 320, 882),
+    ("dev", "AKS", "dumps/aks/dev350.json", 174, 350),
+    ("dev", "WeakFT", "dumps/weakft/dev350.json", 178, 350),
+    ("dev", "CardinalityLedger", "dumps/cardinality_ledger/dev350.json", 204, 350),
+    ("dev", "AKS-90", "dumps/aks90/dev350.json", 186, 350),
+    ("video-mme", "AKS", "dumps/aks/video_mme.json", 1805, 2700),
     (
-        "dev",
-        "StatedTimeAddressDecode",
-        "dumps/table_dev350/stated_time_address_decode_iter9/val.json",
-        178,
-        350,
-    ),
-    (
-        "dev",
+        "video-mme",
         "CardinalityLedger",
-        "dumps/table_dev350/cardinality_ledger/val.json",
-        204,
-        350,
+        "dumps/cardinality_ledger/video_mme.json",
+        1823,
+        2700,
     ),
-    ("dev", "AKS-90", "dumps/table_dev350/aks_k90/val.json", 186, 350),
+    ("mlvu", "AKS", "dumps/aks/mlvu.json", 1566, 2174),
+    (
+        "mlvu",
+        "CardinalityLedger",
+        "dumps/cardinality_ledger/mlvu.json",
+        1631,
+        2174,
+    ),
 ]
 
 
@@ -48,9 +47,9 @@ def archive_root(explicit: str | None) -> Path:
     if explicit:
         return Path(explicit).resolve()
     here = Path(__file__).resolve().parent.parent
-    if (here / "dumps" / "table_heldout").is_dir():
+    if (here / "dumps" / "aks").is_dir():
         return here
-    raise SystemExit("pass --archive pointing at the supplementary pack")
+    raise SystemExit("pass --archive pointing at videoharness-rsi-supplement")
 
 
 def load_dump(path: Path) -> tuple[int, int]:
@@ -72,14 +71,20 @@ def main() -> int:
     args = parser.parse_args()
     root = archive_root(args.archive)
 
-    print("LVBench held-out")
     failed = False
     last_split = None
+    headings = {
+        "held-out": "LVBench held-out 882",
+        "dev": "LVBench dev 350",
+        "video-mme": "Video-MME 2700",
+        "mlvu": "MLVU 2174",
+    }
     for split, label, rel, exp_c, exp_t in ROWS:
-        if split != last_split and last_split == "held-out":
-            print()
-            print("LVBench dev")
-        last_split = split
+        if split != last_split:
+            if last_split is not None:
+                print()
+            print(headings[split])
+            last_split = split
         path = root / rel
         if not path.is_file():
             print(f"{label:<24} MISSING {rel}")
@@ -87,7 +92,7 @@ def main() -> int:
             continue
         got_c, got_t = load_dump(path)
         acc = 100.0 * got_c / got_t if got_t else 0.0
-        print(f"{label:<24} {got_c:3d} / {got_t} = {acc:5.2f}")
+        print(f"{label:<24} {got_c:4d} / {got_t} = {acc:5.2f}")
         if (got_c, got_t) != (exp_c, exp_t):
             print(f"  expected {exp_c} / {exp_t}", file=sys.stderr)
             failed = True

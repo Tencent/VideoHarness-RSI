@@ -7,7 +7,11 @@ CLIP: `clip-ViT-B-32` at `http://127.0.0.1:8181` (needed by `aks`, `cardinality_
 
 Frozen scores: `paper/scores.json`. McNemar: `paper/mcnemar.json`.
 
-Packed-context logs for the table endpoints live in the supplementary archive (`dumps/table_dev350/*/val_contexts.jsonl`). Re-runs here should set `VL_LOG_CONTEXT=1`.
+Packed-context logs are **not in this git tree**. They live in the supplementary
+pack (`videoharness-rsi-supplement`, DOI TBD). After unpacking, see
+`dumps/CONTEXTS.md` and `dumps/{aks,weakft,cardinality_ledger}/val_contexts.jsonl`.
+`pack_index.jsonl` is truncated; do not reconstruct prompts from it.
+Re-runs here should set `VL_LOG_CONTEXT=1`.
 
 LVBench / Video-MME / MLVU are **not** Apache-2.0. Read [`DATASETS.md`](DATASETS.md) before downloading. Videos stay local; do not commit them.
 

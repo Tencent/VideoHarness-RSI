@@ -7,7 +7,8 @@
     "temperature": 0.0,
     "lvbench": "83 local videos / 1232 QA subset, shuffle seed 42, val 350 + held-out 882. Not full LVBench.",
     "held_out_rule": "Official held-out is an 882-only dump, or results[350:] of a 1232-pool run. Do not quote the file-level accuracy of a 1232 JSON as held-out.",
-    "context_logs": "Contemporaneous val_contexts.jsonl (no pixels; frame_id / timestamp / caption / image_sha256) for AKS, CardinalityLedger, StatedTimeAddressDecode on dev350. Compact pack_index.jsonl sits beside each sidecar. Uniform and AKS-90 have scores but no contemporaneous sidecar."
+    "context_logs": "Contemporaneous val_contexts.jsonl for AKS, CardinalityLedger, and WeakFT on dev350, inside the supplementary pack. pack_index.jsonl is truncated.",
+    "dump_root": "videoharness-rsi-supplement (not this git repository)"
   },
   "lvbench": {
     "pilot_uniform_k": {
@@ -38,7 +39,8 @@
         "wilson95_pct": [
           33.17,
           39.51
-        ]
+        ],
+        "dump": "dumps/uniform/held882.json"
       }
     },
     "pilot_retrieved_k": {
@@ -72,8 +74,8 @@
           44.51,
           54.93
         ],
-        "dump": "dumps/table_dev350/aks/val.json",
-        "context": "dumps/table_dev350/aks/val_contexts.jsonl"
+        "dump": "dumps/aks/dev350.json",
+        "context": "dumps/aks/val_contexts.jsonl"
       },
       "held_out_882": {
         "correct": 411,
@@ -83,8 +85,8 @@
           43.33,
           49.9
         ],
-        "note": "Paired re-eval used with CardinalityLedger McNemar and the current paper table (46.6). Older unpaired dump 410/882 kept at dumps/table_heldout/aks_410_unpaired/held882.json.",
-        "dump": "dumps/table_heldout/aks/held882.json"
+        "note": "Paired re-eval used with CardinalityLedger McNemar and the current paper table (46.6). Dump paths are relative to videoharness-rsi-supplement, not this git tree.",
+        "dump": "dumps/aks/held882.json"
       },
       "avg_frames": 40.0,
       "visual_tokens_heldout": 8703
@@ -98,7 +100,7 @@
           47.91,
           58.31
         ],
-        "dump": "dumps/table_dev350/aks_k90/val.json",
+        "dump": "dumps/aks90/dev350.json",
         "note": "53.1. No contemporaneous sidecar."
       },
       "held_out_882": {
@@ -109,7 +111,7 @@
           45.92,
           52.5
         ],
-        "dump": "dumps/table_heldout/aks_k90/held882.json",
+        "dump": "dumps/aks90/held882.json",
         "note": "49.2 (434/882)."
       },
       "avg_frames": 90.0,
@@ -125,8 +127,8 @@
           45.64,
           56.06
         ],
-        "dump": "dumps/table_dev350/stated_time_address_decode_iter9/val.json",
-        "context": "dumps/table_dev350/stated_time_address_decode_iter9/val_contexts.jsonl",
+        "dump": "dumps/weakft/dev350.json",
+        "context": "dumps/weakft/val_contexts.jsonl",
         "note": "Uniform-seeded endpoint WeakFT / StatedTimeAddressDecode."
       },
       "held_out_882": {
@@ -137,7 +139,7 @@
           45.69,
           52.28
         ],
-        "dump": "dumps/table_heldout/stated_time_address_decode_iter9/held882.json",
+        "dump": "dumps/weakft/held882.json",
         "note": "49.0 (432/882). Paper rounds 48.979 to 49.0."
       },
       "avg_frames": 39.97,
@@ -153,8 +155,8 @@
           53.06,
           63.33
         ],
-        "dump": "dumps/table_dev350/cardinality_ledger/val.json",
-        "context": "dumps/table_dev350/cardinality_ledger/val_contexts.jsonl",
+        "dump": "dumps/cardinality_ledger/dev350.json",
+        "context": "dumps/cardinality_ledger/val_contexts.jsonl",
         "note": "AKS-seeded endpoint. rsi-C-aks-blind-q350."
       },
       "held_out_882": {
@@ -165,7 +167,7 @@
           51.46,
           58.02
         ],
-        "dump": "dumps/table_heldout/cardinality_ledger/held882.json"
+        "dump": "dumps/cardinality_ledger/held882.json"
       },
       "avg_frames_dev": 87.65,
       "avg_frames_heldout": 89.45,
@@ -214,7 +216,8 @@
         "wilson95_pct": [
           65.05,
           68.6
-        ]
+        ],
+        "dump": "dumps/aks/video_mme.json"
       },
       "cardinality_ledger": {
         "correct": 1823,
@@ -224,7 +227,7 @@
           65.73,
           69.26
         ],
-        "dump": "dumps/transfer/video_mme_2700/cardinality_ledger/test.json",
+        "dump": "dumps/cardinality_ledger/video_mme.json",
         "note": "67.5"
       }
     },
@@ -245,7 +248,8 @@
         "wilson95_pct": [
           70.11,
           73.88
-        ]
+        ],
+        "dump": "dumps/aks/mlvu.json"
       },
       "cardinality_ledger": {
         "correct": 1631,
@@ -255,7 +259,7 @@
           73.16,
           76.8
         ],
-        "dump": "dumps/transfer/mlvu_2174/cardinality_ledger/test.json",
+        "dump": "dumps/cardinality_ledger/mlvu.json",
         "note": "75.0; 6 parse failures in dump."
       }
     }

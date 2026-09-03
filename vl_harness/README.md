@@ -11,7 +11,7 @@ Default config: **`config_k40.yaml`** (K=40, LVBench val 350 / test 882, seed 42
 - `video.py` — frame decode / sampling / `frame_budget`
 - `data.py` / `loaders_real.py` — episodes + MCQ eval
 - `inner_loop.py` / `benchmark.py` / `meta_harness.py` — eval + RSI outer loop
-- `agents/` — paper systems (`pilot_uniform_k`, `aks`, `embed_navigate_hybrid_iter2`, `timestamped_aks_iter5`) plus seed sketches
+- `agents/` — paper systems (`pilot_uniform_k`, `aks`, `stated_time_address_decode_iter9` / WeakFT, `cardinality_ledger`) plus seed sketches
 - `.claude/skills/vl-harness/SKILL.md` — proposer prior
 
 ## Smoke

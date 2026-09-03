@@ -12,14 +12,13 @@ from pathlib import Path
 from typing import Sequence
 
 HELD = {
-    "uniform": "dumps/table_heldout/pilot_uniform_k/held882.json",
-    "weakft": "dumps/table_heldout/stated_time_address_decode_iter9/held882.json",
-    "aks": "dumps/table_heldout/aks/held882.json",
-    "ledger": "dumps/table_heldout/cardinality_ledger/held882.json",
-    "aks90": "dumps/table_heldout/aks_k90/held882.json",
+    "uniform": "dumps/uniform/held882.json",
+    "weakft": "dumps/weakft/held882.json",
+    "aks": "dumps/aks/held882.json",
+    "ledger": "dumps/cardinality_ledger/held882.json",
+    "aks90": "dumps/aks90/held882.json",
 }
 
-# Frozen AKS → CardinalityLedger held-out (paper / scores.json).
 EXPECTED_AKS_LEDGER = {"ref_only": 63, "cand_only": 135, "p": 3.39e-7}
 
 PAIRS = [
@@ -33,9 +32,9 @@ def archive_root(explicit: str | None) -> Path:
     if explicit:
         return Path(explicit).resolve()
     here = Path(__file__).resolve().parent.parent
-    if (here / "dumps" / "table_heldout").is_dir():
+    if (here / "dumps" / "aks").is_dir():
         return here
-    raise SystemExit("pass --archive pointing at the supplementary pack")
+    raise SystemExit("pass --archive pointing at videoharness-rsi-supplement")
 
 
 def load_flags(path: Path) -> tuple[list[bool], list[object]]:
@@ -132,9 +131,8 @@ def main() -> int:
             raise SystemExit(f"missing {path}")
         flags[name], keys[name] = load_flags(path)
 
-    n = flags["aks"]
-    if len(n) != 882:
-        raise SystemExit(f"AKS held-out n={len(n)}, expected 882")
+    if len(flags["aks"]) != 882:
+        raise SystemExit(f"AKS held-out n={len(flags['aks'])}, expected 882")
     for name in HELD:
         if len(flags[name]) != 882:
             raise SystemExit(f"{name} n={len(flags[name])}, expected 882")
