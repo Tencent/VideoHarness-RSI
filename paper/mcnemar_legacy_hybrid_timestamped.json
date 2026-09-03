@@ -1,0 +1,36 @@
+[
+  {
+    "n": 350,
+    "ref": "pilot_uniform_k",
+    "cand": "embed_navigate_hybrid_iter2",
+    "acc_ref_pct": 36.0,
+    "acc_cand_pct": 48.6,
+    "ref_only": 34,
+    "cand_only": 78,
+    "discordant": 112,
+    "p": 3.91e-05
+  },
+  {
+    "n": 882,
+    "ref": "pilot_uniform_k",
+    "cand": "embed_navigate_hybrid_iter2",
+    "acc_ref_pct": 36.3,
+    "acc_cand_pct": 45.4,
+    "ref_only": 65,
+    "cand_only": 145,
+    "discordant": 210,
+    "p": 3.45e-08
+  },
+  {
+    "n": 882,
+    "ref": "aks",
+    "cand": "timestamped_aks_iter5",
+    "acc_ref_pct": 46.49,
+    "acc_cand_pct": 50.34,
+    "ref_only": 29,
+    "cand_only": 63,
+    "discordant": 92,
+    "p": 0.00051,
+    "note": "Paired 882. Both=381, neither=409."
+  }
+]

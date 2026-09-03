@@ -1,0 +1,49 @@
+{
+  "protocol": {
+    "split": "lvbench_held882_seed42",
+    "n_boot": 20000,
+    "seed": 42,
+    "method": "paired percentile bootstrap of accuracy difference in percentage points; questions resampled with replacement"
+  },
+  "pairs": [
+    {
+      "ref": "Uniform",
+      "cand": "StatedTimeAddressDecode",
+      "n": 882,
+      "delta_pp": 12.6984,
+      "ci95_pp": [
+        9.4104,
+        15.9864
+      ],
+      "mcnemar_ref_only": 59,
+      "mcnemar_cand_only": 171,
+      "mcnemar_p": 7.906679830161329e-14
+    },
+    {
+      "ref": "AKS",
+      "cand": "CardinalityLedger",
+      "n": 882,
+      "delta_pp": 8.1633,
+      "ci95_pp": [
+        5.102,
+        11.2245
+      ],
+      "mcnemar_ref_only": 63,
+      "mcnemar_cand_only": 135,
+      "mcnemar_p": 3.3915481840869305e-07
+    },
+    {
+      "ref": "AKS-90",
+      "cand": "CardinalityLedger",
+      "n": 882,
+      "delta_pp": 5.5556,
+      "ci95_pp": [
+        2.381,
+        8.7302
+      ],
+      "mcnemar_ref_only": 78,
+      "mcnemar_cand_only": 127,
+      "mcnemar_p": 0.0007607317898791614
+    }
+  ]
+}

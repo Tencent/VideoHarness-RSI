@@ -3,9 +3,11 @@
 Default config is `vl_harness/config_k40.yaml`: **K=40**, LVBench **num_val=350 / num_test=882**, seed **42**, temperature **0**.
 
 Inner VLM: Qwen3-VL-8B-Instruct at `http://127.0.0.1:8080/v1`.  
-CLIP: `clip-ViT-B-32` at `http://127.0.0.1:8181` (needed by `aks` and `embed_navigate_hybrid_iter2`).
+CLIP: `clip-ViT-B-32` at `http://127.0.0.1:8181` (needed by `aks`, `cardinality_ledger`, and AKS-90).
 
 Frozen scores: `paper/scores.json`. McNemar: `paper/mcnemar.json`.
+
+Packed-context logs for the table endpoints live in the supplementary archive (`dumps/table_dev350/*/val_contexts.jsonl`). Re-runs here should set `VL_LOG_CONTEXT=1`.
 
 LVBench / Video-MME / MLVU are **not** Apache-2.0. Read [`DATASETS.md`](DATASETS.md) before downloading. Videos stay local; do not commit them.
 
@@ -57,44 +59,44 @@ VL_LOG_CONTEXT=1 PYTHONPATH=.. python -m vl_harness.inner_loop \
 
 Expect **174/350 = 49.7%**.
 
-## 3. k40 champion (hybrid)
-
-Needs CLIP. Captions the 320-frame ingest pool (slow).
+## 3. Uniform-seeded endpoint (StatedTimeAddressDecode / WeakFT)
 
 ```bash
 VL_LOG_CONTEXT=1 PYTHONPATH=.. python -m vl_harness.inner_loop \
-  --memory agents/embed_navigate_hybrid_iter2.py \
+  --memory agents/stated_time_address_decode_iter9.py \
   --dataset lvbench --seed 42 --mode offline \
   --num-train 0 --num-val 350 --num-test 0 \
   --frame-budget 40 \
   --model Qwen3-VL-8B-Instruct --api-base http://127.0.0.1:8080/v1 \
-  --val-output logs/repro/hybrid/val.json \
-  --log logs/repro/hybrid/log.jsonl
+  --val-output logs/repro/weakft/val.json \
+  --log logs/repro/weakft/log.jsonl
 ```
 
-Search val was **170/350 = 48.6%**. The paper table uses a later re-eval **48.3%**.
+Expect **178/350 = 50.9%**. Held-out is **432/882 = 49.0%**.
 
-## 4. AKS-run champion
+## 4. AKS-seeded endpoint (CardinalityLedger)
+
+Needs CLIP. Multi-stage; cumulative frames ≈ 88–90.
 
 ```bash
 VL_LOG_CONTEXT=1 PYTHONPATH=.. python -m vl_harness.inner_loop \
-  --memory agents/timestamped_aks_iter5.py \
+  --memory agents/cardinality_ledger.py \
   --dataset lvbench --seed 42 --mode offline \
   --num-train 0 --num-val 350 --num-test 0 \
   --frame-budget 40 \
   --model Qwen3-VL-8B-Instruct --api-base http://127.0.0.1:8080/v1 \
-  --val-output logs/repro/timestamped_aks/val.json \
-  --log logs/repro/timestamped_aks/log.jsonl
+  --val-output logs/repro/cardinality_ledger/val.json \
+  --log logs/repro/cardinality_ledger/log.jsonl
 ```
 
-Expect **182/350 = 52.0%**. Same val as the iter2 clock bypass; iter5 adds per-frame `[Xs]` labels.
+Expect **204/350 = 58.3%**. Held-out is **483/882 = 54.8%**.
 
 ## 5. Official held-out 882
 
 Do **not** quote `accuracy` on a 1232-long `test.json` as held-out.
 
 ```bash
-PYTHONPATH=.. python -m vl_harness.inner_loop \
+VL_LOG_CONTEXT=1 PYTHONPATH=.. python -m vl_harness.inner_loop \
   --memory agents/pilot_uniform_k.py \
   --dataset lvbench --seed 42 --mode offline \
   --num-train 0 --num-val 0 --num-test 1232 \
@@ -110,17 +112,19 @@ held = d["results"][350:]
 print(sum(r["was_correct"] for r in held), "/", len(held))
 ```
 
-Replace `--memory` with `aks.py`, `embed_navigate_hybrid_iter2.py`, or `timestamped_aks_iter5.py`.
+Replace `--memory` with `aks.py`, `stated_time_address_decode_iter9.py`, or `cardinality_ledger.py`. For AKS-90 use `aks.py` with `--frame-budget 90`.
+
+The paper's AKS held-out row is the **411/882** paired re-eval, not an older 410/882 dump.
 
 ## 6. McNemar
 
 ```bash
 PYTHONPATH=.. python -m vl_harness.stats compare \
-  logs/repro/uniform_k40/val.json \
-  logs/repro/hybrid/val.json
+  logs/repro/aks/val.json \
+  logs/repro/cardinality_ledger/val.json
 ```
 
-Frozen discordant counts: `paper/mcnemar.json`.
+Frozen discordant counts (including held-out 882): `paper/mcnemar.json`.
 
 ## Split
 
