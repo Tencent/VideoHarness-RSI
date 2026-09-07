@@ -11,18 +11,18 @@ Videos come from the gated official ``MLVU/MVLU`` (individual mp4s) and/or
 Examples::
 
     # Dev MCQ annotations only
-    python -m vl_harness.download_mlvu
+    python scripts/download_mlvu.py
 
     # Small subset (smallest N per task)
-    HF_TOKEN=hf_xxx python -m vl_harness.download_mlvu \\
+    HF_TOKEN=hf_xxx python scripts/download_mlvu.py \\
         --source official --tasks needle,plotQA --max-videos 20
 
     # FULL Dev MCQ videos (~190GB, 1122 unique files) — what you usually want
-    HF_TOKEN=hf_xxx python -m vl_harness.download_mlvu \\
+    HF_TOKEN=hf_xxx python scripts/download_mlvu.py \\
         --source official --all-mcq --workers 8
 
     # Also pull Test MCQ annotations + videos (~77GB tar parts)
-    HF_TOKEN=hf_xxx python -m vl_harness.download_mlvu \\
+    HF_TOKEN=hf_xxx python scripts/download_mlvu.py \\
         --source official --all-mcq --include-test --workers 8
 """
 
@@ -38,7 +38,11 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from .loaders_real import _mlvu_dir
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+from vl_harness.loaders_real import _mlvu_dir
 
 SY1998_REPO = "sy1998/MLVU_dev"
 OFFICIAL_REPO = "MLVU/MVLU"

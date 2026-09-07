@@ -2,7 +2,7 @@
 
 Core library for **VL-Harness-RSI**: evolvable long-video memory harnesses around a frozen VLM.
 
-Default config: **`config_k40.yaml`** (K=40, LVBench val 350 / test 882, seed 42).
+Default config: **`../configs/config_k40.yaml`** (K=40, LVBench val 350 / test 882, seed 42).
 
 ## Layout
 
@@ -12,7 +12,9 @@ Default config: **`config_k40.yaml`** (K=40, LVBench val 350 / test 882, seed 42
 - `data.py` / `loaders_real.py` — episodes + MCQ eval
 - `inner_loop.py` / `benchmark.py` / `meta_harness.py` — eval + RSI outer loop
 - `agents/` — paper systems (`pilot_uniform_k`, `aks`, `stated_time_address_decode_iter9` / WeakFT, `cardinality_ledger`) plus seed sketches
-- `.claude/skills/vl-harness/SKILL.md` — proposer prior
+
+The proposer prior (skill), configs, downloaders, and run outputs now live outside
+the package: `../skills/vl-harness/SKILL.md`, `../configs/`, `../scripts/`, `../runs/`.
 
 ## Smoke
 
@@ -22,8 +24,8 @@ Code is Apache-2.0; Meta-Harness-derived files are MIT (see `../NOTICE`).
 `../manifests/` is CC-BY-NC-SA-4.0. Dataset terms: `../DATASETS.md`.
 
 ```bash
-PYTHONPATH=.. python -m vl_harness.inner_loop \
-  --memory agents/pilot_uniform_k.py \
+PYTHONPATH=. python -m vl_harness.inner_loop \
+  --memory vl_harness/agents/pilot_uniform_k.py \
   --dataset mock_niah --model stub --mode offline \
   --num-train 10 --num-val 40 --num-test 40 \
   --frame-budget 40 \

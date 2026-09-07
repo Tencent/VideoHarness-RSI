@@ -15,6 +15,19 @@ data/
 *.mkv
 *.avi
 
+# Local eval dumps (paper per-question dumps live in the supplement, not this tree)
+runs/repro/
+**/val_contexts.jsonl
+**/console.log
+
+# Local search drafts from test iterations — paper endpoints stay tracked
+vl_harness/agents/aks_rewatch_verify.py
+vl_harness/agents/caption_fusion_router.py
+vl_harness/agents/coarse_fine_hybrid_decode.py
+vl_harness/agents/event_hierarchy_verify.py
+vl_harness/agents/hybrid_router_timestamp_decode.py
+vl_harness/agents/mmr_temporal_fusion.py
+
 # Python
 __pycache__/
 *.py[cod]

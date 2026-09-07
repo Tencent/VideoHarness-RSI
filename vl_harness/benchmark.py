@@ -20,9 +20,9 @@ def load_config() -> dict:
     if env_path:
         config_path = Path(env_path)
         if not config_path.is_absolute():
-            config_path = Path(__file__).parent / config_path
+            config_path = Path(__file__).parent.parent / "configs" / config_path
     else:
-        config_path = Path(__file__).parent / "config_k40.yaml"
+        config_path = Path(__file__).parent.parent / "configs" / "config_k40.yaml"
     with open(config_path) as f:
         return yaml.safe_load(f)
 

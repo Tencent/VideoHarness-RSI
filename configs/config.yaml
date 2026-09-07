@@ -1,10 +1,8 @@
-# Main paper protocol (default via setenv / meta_harness).
-# K=40, LVBench 0/350/882, seed 42, temperature 0.
-# Do not change the LVBench split without renaming the run — that is a
-# different experiment from the numbers in README.md.
-# Generic config.yaml uses the legacy 200/1032 split (Appendix G).
+# Generic / legacy config (Appendix G): LVBench val 200 / test 1032.
+# Main paper numbers use config_k40.yaml (val 350 / test 882). Prefer that file
+# via VL_HARNESS_CONFIG or `meta_harness --config config_k40.yaml`.
 run:
-  name: paper-k40
+  name: default-200-1032
   iterations: 5
   skip_baseline: false
   fresh: false
@@ -30,8 +28,8 @@ dataset:
       num_test: 4000
     lvbench:
       num_train: 0
-      num_val: 350
-      num_test: 882
+      num_val: 200
+      num_test: 1032
 inner_loop:
   mode: offline
   num_epochs: 1
@@ -44,7 +42,8 @@ inner_loop:
   batch_size: 1
   seed: 42
 evolution:
-  candidate_concurrency: 4
+  candidate_concurrency: 1
+  num_candidates: 1
 search_space: full
 models:
 - model: Qwen3-VL-8B-Instruct
@@ -64,6 +63,6 @@ datasets:
 memory_systems:
   baselines:
   - pilot_uniform_k
-  # - aks
+  - aks
   include_paper_prompt_seed: false
   proposed: []

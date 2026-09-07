@@ -36,15 +36,15 @@ The loader only builds an episode if the local mp4 exists. A different local vid
 
 ## Download helpers
 
-From `vl_harness/`:
+From the repo root:
 
 ```bash
-source ../setenv.sh
-PYTHONPATH=.. python -m vl_harness.download_lvbench
-PYTHONPATH=.. python -m vl_harness.download_video_mme
-PYTHONPATH=.. python -m vl_harness.download_mvbench
+source setenv.sh
+python scripts/download_lvbench.py
+python scripts/download_video_mme.py
+python scripts/download_mvbench.py
 # MLVU may need HF_TOKEN for gated assets:
-# HF_TOKEN=hf_xxx PYTHONPATH=.. python -m vl_harness.download_mlvu
+# HF_TOKEN=hf_xxx python scripts/download_mlvu.py
 ```
 
 **LVBench videos:** prefer ModelScope (`AI-ModelScope/LVBench`), which is the
@@ -52,7 +52,7 @@ default `--source modelscope`. That snapshot is what the 83-id manifest was
 recorded against (~83 of 103 videos; the rest are copyright-removed).
 
 ```bash
-PYTHONPATH=.. python -m vl_harness.download_lvbench --download-videos --max-videos 0
+python scripts/download_lvbench.py --download-videos --max-videos 0
 ```
 
 `--source youtube` uses yt-dlp. YouTube’s terms of service generally forbid
@@ -62,8 +62,8 @@ matching the 83 IDs in the manifest.
 Offline plumbing without videos:
 
 ```bash
-PYTHONPATH=.. python -m vl_harness.inner_loop \
-  --memory agents/pilot_uniform_k.py \
+PYTHONPATH=. python -m vl_harness.inner_loop \
+  --memory vl_harness/agents/pilot_uniform_k.py \
   --dataset mock_niah --model stub --mode offline \
   --num-train 10 --num-val 40 --num-test 40 \
   --val-output /tmp/vlh/val.json --log /tmp/vlh/log.jsonl

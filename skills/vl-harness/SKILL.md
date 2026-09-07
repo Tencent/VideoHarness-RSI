@@ -15,11 +15,20 @@ benchmarks separately.
 
 ## CRITICAL CONSTRAINTS
 
-- You MUST implement 3 new harnesses every iteration.
+- You MUST implement exactly 1 new harness every iteration.
 - Do NOT write "the frontier is optimal" or "stop iterating", or abort early.
 - ALWAYS complete all steps including prototyping.
-- Design exactly 3 candidates per iteration: mix exploitation and exploration.
-- **Held-out is off-limits.** Do NOT read `manifests/lvbench_split_seed42.json` `test` entries, any `target` / answer letter on held-out items, or any `test.json` / official-test dump. Evolution is scored on val only. Using held-out labels is a protocol violation, not a clever retrieval trick.
+- Design exactly 1 candidate per iteration. Parent is **always the current
+  frontier F_t** (the task prompt names it). Copy `agents/<F_t>.py` and splice;
+  do not start from a different file.
+- Write the hypothesis from traces **before** any source edit.
+- The outer loop **injects an archive** into the task prompt: historical
+  harness source, scores, and traces. Use it. If a section is truncated,
+  `Read` the on-disk `val.json` / `val_contexts.jsonl` / `agents/*.py`.
+  The file you write must still copy F_t.
+- **Held-out is off-limits.** Do NOT read `manifests/lvbench_split_seed42.json`
+  `test` entries, any `target` / answer letter on held-out items, or any
+  `test.json` / official-test dump. Evolution is scored on val only.
 
 ## THE OBJECTIVE: maximize ACCURACY (cost is reporting-only)
 
@@ -45,16 +54,14 @@ The most common failure mode is harnesses that are parameter variants (frame
 count, top-k, resolution). Check `evolution_summary.jsonl` — sweeps almost always
 regress or tie. **Good candidates change a fundamental mechanism.**
 
-## DEFAULT INGEST POLICY (mandatory unless the hypothesis requires otherwise)
+## INGEST POLICY (per-request window)
 
-New harnesses MUST start from a full-coverage ingest pool sampled at **2 fps**
-and capped at **320 frames**. Use
-`self.sample_ingest_frames(video, max_frames=320)` in `build_memory` (or the
-same formula: `min(round(video.duration * 2.0), 320, video.num_available())`).
-Do NOT introduce fixed `32`/`48`/`64`-frame ingest pools as a default. Small
-`TOP_K` / verification-frame counts are allowed only at answer time after the
-full pool has been ingested. Any deviation requires a falsifiable mechanism
-hypothesis and an explicit explanation in `pending_eval.json`.
+The framework hard cap is a **per-request** window: one VLM call may contain at
+most `frame_budget()` frames (K=40 on the paper protocol; otherwise
+`MAX_REQUEST_FRAMES`). `render_frames` raises if you exceed it. That is **not**
+an ingest-pool size. How many frames you ingest, at what fps, and how many
+passes you use, is part of the hypothesis. Do not treat a 320-frame / 2 fps
+pool as mandatory. Small top-k values remain answer-time packing choices.
 
 ## SEARCH-SPACE MODE (read this first — it constrains what you may propose)
 
@@ -78,7 +85,8 @@ TEXT-ONLY constraint, or the ablation is invalidated.
 
 ## The 7 video-specific search axes
 
-Pick candidates that move DIFFERENT axes than the last 3 iterations:
+Pick a candidate that moves a DIFFERENT axis than the last 3 iterations when
+that still improves the frontier; otherwise exploitation of F_t is fine.
 
 - **A. Ingestion** — uniform vs shot-boundary vs motion-adaptive sampling;
   eager vs lazy captioning; ingest density.
@@ -95,27 +103,22 @@ Pick candidates that move DIFFERENT axes than the last 3 iterations:
 - **G. Answering** — single pass / re-watch verification (retrieve, then look again
   to confirm) / multi-retrieval self-consistency.
 
-## HARD EXPLORATION CONSTRAINT (must satisfy every iteration)
+## HARD EXPLORATION CONSTRAINT (optional at N=1)
 
 Read `evolution_summary.jsonl` and take **the last 3 iterations' candidates**
 (if fewer, use all available). Collect the union of every candidate's
 `components` axis tags (e.g. `axisA-ingest`, `axisD-router`, ...).
 
-**Constraint**: at least **1 out of your 3 new candidates** in this iteration
-MUST have its `components` list contain **at least one axis tag that does NOT
-appear in that recent-3-iters union**. This candidate is your "forced
-exploration slot" and its `axis` field MUST be `"exploration"`.
+**Constraint**: N=1, so the forced-exploration slot is optional. Prefer an
+unused axis when it still improves the frontier; otherwise exploitation is
+fine. If you do take a new axis, set `axis` to `"exploration"`.
 
-If every axis has already appeared in the recent-3 union (rare), you MUST
-instead switch that slot to a fundamentally different **combination** — e.g.
-a two-axis pairing that has not appeared together in any prior candidate.
+If every axis has already appeared in the recent-3 union (rare), you MAY
+instead switch to a fundamentally different **combination**.
 
-Do NOT rationalize skipping this rule ("the champion axis is clearly best" is
-NOT a valid reason — that's exactly the exploitation trap we're breaking).
-
-Also: if the forced-exploration candidate loses on val, that is FINE and
-EXPECTED — the value of exploration is priced into the multi-iteration search,
-not into the single-iteration accuracy.
+If an exploration candidate loses on val, that is FINE and EXPECTED — the
+value of exploration is priced into the multi-iteration search, not into the
+single-iteration accuracy.
 
 Prior hand-designed systems (WorldMM: episodic/semantic/visual memory + adaptive
 routing; Homer: hierarchical perceptual/entity/event memory + verify-and-correct +
@@ -133,11 +136,13 @@ runtime skill accumulation) are FAIR GAME to reimplement and combine as candidat
 
 ## WORKFLOW (do ALL steps yourself)
 
-### Step 1: Analyze
-Read `evolution_summary.jsonl` (what's been tried), `frontier_val.json` (current
-best per dataset + Pareto), `config.yaml` (datasets/baselines), and recent
-`logs/<dataset>/<harness>/<model>/log.jsonl` traces. Formulate 3 falsifiable
-hypotheses, each targeting a different axis above.
+### Step 1: Analyze traces, then write H
+From the run directory in the task prompt, read F_t's `val.json` (which
+questions are already correct) and `val_contexts.jsonl` (what F_t actually
+showed the VLM: frames, timestamps, prompt text). Also read
+`evolution_summary.jsonl` and `frontier_val.json`.
+
+Formulate **one** falsifiable hypothesis from those traces, then implement.
 
 - Rows with `outcome: "execution_error"` are INFRASTRUCTURE CRASHES, NOT rejected
   hypotheses. Do not update your prior based on them; do not avoid the mechanism
@@ -145,18 +150,17 @@ hypotheses, each targeting a different axis above.
   (and often high-value) to retry with a simpler / more robust implementation.
 
 ### Step 2: Prototype — MANDATORY
-For each candidate, write a throwaway script in `/tmp/` exercising the core
-retrieval/packing logic on a few real episodes pulled from logs. Try 2-3 variants;
-keep the best. Delete scripts when done.
+Write a throwaway script in `/tmp/` exercising the core retrieval/packing logic
+on a few real episodes pulled from logs. Try 2-3 variants; keep the best.
+Delete scripts when done.
 
 ### Step 3: Implement
-1. Pick a globally unique snake_case `name` (check `agents/` and
-   `evolution_summary.jsonl`; append `_iter{N}` on collision).
-2. Copy a top-performing base harness to `agents/<name>.py`, then modify.
-3. Implement the new mechanism per your hypothesis.
-4. **Self-critique:** if `build_memory`/`answer_question` differ from the base only
+1. Pick a globally unique snake_case `name` (check `evolution_summary.jsonl`;
+   append `_iter{N}` on collision).
+2. Copy `agents/<F_t>.py` to `agents/<name>.py`, then splice the new mechanism.
+3. **Self-critique:** if `build_memory`/`answer_question` differ from F_t only
    in constants, REWRITE with a genuinely new mechanism.
-5. Validate: `python -c "from vl_harness.agents.<name> import *; print('OK')"`
+4. Validate: `python -c "from vl_harness.agents.<name> import *; print('OK')"`
 
 Do not edit `config.yaml` to register candidates — `agents/` is auto-discovered.
 
@@ -168,13 +172,13 @@ Write to the path given in the task prompt:
   "iteration": <N>,
   "candidates": [
     {"name": "<snake>", "file": "agents/<name>.py", "hypothesis": "<claim>",
-     "axis": "exploitation|exploration", "base_system": "<base>",
+     "axis": "exploitation|exploration", "base_system": "<F_t>",
      "components": ["axisD-router", "axisF-packing"]}
   ]
 }
 ```
 
-Output: `CANDIDATES: <name1>, <name2>, <name3>`
+Output: `CANDIDATES: <name>`
 
 ## VideoMemoryHarness interface
 
@@ -199,6 +203,7 @@ class VideoMemoryHarness(ABC):
 - Visual tokens shown in `answer_question` are the Pareto currency — spend them wisely.
 
 ## Directory structure
-- Val results: `logs/<dataset>/<harness>/<model>/val.json` (accuracy, visual_tokens)
-- Traces: `logs/<dataset>/<harness>/<model>/log.jsonl`
+- Val results: `<run>/ <dataset>/<harness>/<model>/val.json`
+- Traces: `<run>/<dataset>/<harness>/<model>/log.jsonl`
+- Context traces (what the VLM saw): `<run>/<dataset>/<harness>/<model>/val_contexts.jsonl`
 - Test results: `results/<dataset>/<harness>/<model>/test.json` (never seen during evolution)

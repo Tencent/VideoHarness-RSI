@@ -4,8 +4,7 @@ Drop-in replacement for `claude_wrapper` in `meta_harness.py::propose_claude()`.
 Uses any OpenAI-compatible endpoint via litellm; no Claude Code CLI required.
 
 Design:
-- Load SKILL.md, frontier_val.json, evolution_summary.jsonl, existing agents/*.py
-  into a single prompt.
+- Load SKILL.md, frontier_val.json, evolution_summary.jsonl, current F_t.
 - Ask the model to output ONE new candidate as a JSON object containing:
     { "name": snake_case, "hypothesis": str, "axis": str,
       "base_system": str, "components": [str], "code": <full Python file> }
@@ -24,6 +23,8 @@ from typing import Any
 
 from litellm import completion as litellm_completion
 
+from .proposer_archive import render_proposer_archive
+
 # ---- Config knobs (overridable via env) ------------------------------------
 # Proposer talks to an Anthropic-compatible endpoint via litellm
 # (custom_llm_provider, model id, and base URL are independent of the frozen
@@ -38,7 +39,7 @@ DEFAULT_API_BASE = os.environ.get(
 DEFAULT_LLM_PROVIDER = os.environ.get("PROPOSER_LLM_PROVIDER", "anthropic")
 DEFAULT_MAX_TOKENS = int(os.environ.get("PROPOSER_MAX_TOKENS", "8000"))
 DEFAULT_TEMPERATURE = float(os.environ.get("PROPOSER_TEMPERATURE", "0.7"))
-NUM_CANDIDATES = int(os.environ.get("PROPOSER_NUM_CANDIDATES", "3"))
+NUM_CANDIDATES = int(os.environ.get("PROPOSER_NUM_CANDIDATES", "1"))
 
 
 @dataclass
@@ -55,48 +56,10 @@ class ProposerResult:
 
 # ---- Context assembly ------------------------------------------------------
 def _read_skill_md(evolve_dir: Path) -> str:
-    skill = evolve_dir / ".claude" / "skills" / "vl-harness" / "SKILL.md"
+    skill = evolve_dir.parent / "skills" / "vl-harness" / "SKILL.md"
     if skill.exists():
         return skill.read_text()
     return ""
-
-
-def _read_history(logs_dir: Path) -> str:
-    """Load frontier + evolution history in compact form."""
-    parts = []
-    frontier = logs_dir / "frontier_val.json"
-    if frontier.exists():
-        parts.append("## frontier_val.json\n```json\n" + frontier.read_text() + "\n```")
-    summary = logs_dir / "evolution_summary.jsonl"
-    if summary.exists():
-        parts.append(
-            "## evolution_summary.jsonl (past candidates)\n```jsonl\n"
-            + summary.read_text()
-            + "\n```"
-        )
-    return "\n\n".join(parts) if parts else "(no prior history — first iteration)"
-
-
-def _read_existing_agents(evolve_dir: Path) -> str:
-    """Include the current baseline agent files verbatim so the proposer can
-    copy proven patterns."""
-    agents_dir = evolve_dir / "agents"
-    if not agents_dir.exists():
-        return ""
-    out = []
-    # Include only .py files under agents/, ignore __init__.py.
-    for f in sorted(agents_dir.glob("*.py")):
-        if f.name == "__init__.py":
-            continue
-        try:
-            body = f.read_text()
-        except Exception:
-            continue
-        # Truncate huge files so we do not blow the context.
-        if len(body) > 12000:
-            body = body[:12000] + "\n# ... (truncated for context length)\n"
-        out.append(f"### agents/{f.name}\n```python\n{body}\n```")
-    return "\n\n".join(out)
 
 
 def _read_memory_system_iface(evolve_dir: Path) -> str:
@@ -145,8 +108,22 @@ def _build_user_prompt(
     pending_eval_path: Path,
 ) -> str:
     skill = _read_skill_md(evolve_dir)
-    history = _read_history(logs_dir)
-    agents = _read_existing_agents(evolve_dir)
+    parent = "aks"
+    frontier = logs_dir / "frontier_val.json"
+    if frontier.exists():
+        try:
+            data = json.loads(frontier.read_text())
+        except (json.JSONDecodeError, OSError):
+            data = {}
+        for key, val in data.items():
+            if str(key).startswith("_"):
+                continue
+            if isinstance(val, dict) and val.get("best_system"):
+                parent = str(val["best_system"])
+                break
+    archive = render_proposer_archive(
+        logs_dir, evolve_dir / "agents", parent=parent
+    )
     iface = _read_memory_system_iface(evolve_dir)
 
     return f"""# Iteration {iteration}
@@ -154,19 +131,21 @@ def _build_user_prompt(
 ## SKILL.md
 {skill}
 
-## Prior state
-{history}
+## ARCHIVE
+The pack below is historical harness source, scores, and traces.
+The candidate you write must still copy F_t (`{parent}`).
+
+{archive}
 
 {iface}
 
-## Existing agents
-{agents}
-
 ## Your task
 Design ONE new memory system that could plausibly improve the current frontier. \
-Follow the JSON schema described in the system prompt. \
+Follow the JSON schema described in the system prompt. Copy agents/{parent}.py \
+and splice. \
 Make sure the code imports match the existing agents' style and can be imported \
 with `from vl_harness.agents.<name> import *`.
+Write pending_eval.json conceptually via the JSON you return (the outer loop writes it to `{pending_eval_path}`).
 """
 
 

@@ -54,6 +54,41 @@ def frame_token_cost(width: int, height: int) -> int:
 ContentParts = list[dict[str, Any]]
 
 
+def as_pil_image(image: Any) -> Any:
+    """Coerce ``Frame.image`` / image-part payloads to something ``.save``-able.
+
+    Paths and raw bytes are returned unchanged. PIL images pass through.
+    ``numpy.ndarray`` (typical OpenCV mosaic) is converted with
+    ``Image.fromarray``. Without this, hashing a montage for
+    ``val_contexts.jsonl`` crashes with ``'numpy.ndarray' object has no
+    attribute 'save'``.
+    """
+    if image is None or isinstance(image, (str, bytes, bytearray, Path)):
+        return image
+    if callable(getattr(image, "save", None)):
+        return image
+    try:
+        import numpy as np
+        from PIL import Image
+    except ImportError:
+        return image
+    if not isinstance(image, np.ndarray):
+        return image
+    arr = np.ascontiguousarray(image)
+    if arr.dtype != np.uint8:
+        if np.issubdtype(arr.dtype, np.floating) and arr.size and float(np.nanmax(arr)) <= 1.5:
+            arr = (np.nan_to_num(arr) * 255.0).clip(0, 255).astype(np.uint8)
+        else:
+            arr = np.clip(np.nan_to_num(arr), 0, 255).astype(np.uint8)
+    if arr.ndim == 2:
+        return Image.fromarray(arr, mode="L")
+    if arr.ndim == 3 and arr.shape[2] == 1:
+        return Image.fromarray(arr[:, :, 0], mode="L")
+    if arr.ndim == 3 and arr.shape[2] >= 3:
+        return Image.fromarray(arr[:, :, :3], mode="RGB")
+    return image
+
+
 @runtime_checkable
 class VLMCallable(Protocol):
     """A VLM is a callable taking multimodal content parts -> response text."""

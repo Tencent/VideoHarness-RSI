@@ -15,13 +15,13 @@ can iterate on a subset.
 Examples::
 
     # annotations only (no video download)
-    python -m vl_harness.download_lvbench
+    python scripts/download_lvbench.py
 
     # annotations + ModelScope videos (preferred)
-    python -m vl_harness.download_lvbench --download-videos --max-videos 0
+    python scripts/download_lvbench.py --download-videos --max-videos 0
 
     # opt-in YouTube via yt-dlp (ToS / copyright: your responsibility)
-    python -m vl_harness.download_lvbench --download-videos --source youtube --max-videos 10
+    python scripts/download_lvbench.py --download-videos --source youtube --max-videos 10
 """
 
 from __future__ import annotations
@@ -32,7 +32,11 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .loaders_real import _lvbench_dir, _load_lvbench_annotations
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+from vl_harness.loaders_real import _lvbench_dir, _load_lvbench_annotations
 
 LVBENCH_REPO = "THUDM/LVBench"
 META_FILE = "video_info.meta.jsonl"

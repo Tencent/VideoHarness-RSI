@@ -29,10 +29,10 @@ On-disk layout produced::
 Examples::
 
     # annotations only (tiny)
-    python -m vl_harness.download_mvbench
+    python scripts/download_mvbench.py
 
     # annotations + all videos (~17 GB) + path resolution
-    python -m vl_harness.download_mvbench --download-videos --workers 4
+    python scripts/download_mvbench.py --download-videos --workers 4
 """
 
 from __future__ import annotations
@@ -45,7 +45,11 @@ from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from .loaders_real import _mvbench_dir
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+from vl_harness.loaders_real import _mvbench_dir
 
 REPO = "OpenGVLab/MVBench"
 TASKS = [

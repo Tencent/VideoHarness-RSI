@@ -1865,7 +1865,7 @@ wheels = [
 ]
 
 [[package]]
-name = "vl-harness"
+name = "vl-harness-rsi"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

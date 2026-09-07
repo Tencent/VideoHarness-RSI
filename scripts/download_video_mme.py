@@ -27,10 +27,10 @@ On-disk layout produced::
 Examples::
 
     # annotations only (tiny)
-    python -m vl_harness.download_video_mme
+    python scripts/download_video_mme.py
 
     # annotations + all videos (~101 GB, background this)
-    python -m vl_harness.download_video_mme --download-videos --workers 4
+    python scripts/download_video_mme.py --download-videos --workers 4
 """
 
 from __future__ import annotations
@@ -43,7 +43,11 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from .loaders_real import _video_mme_dir
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+from vl_harness.loaders_real import _video_mme_dir
 
 REPO = "lmms-lab/Video-MME"
 ANNOTATION_PARQUET = "videomme/test-00000-of-00001.parquet"

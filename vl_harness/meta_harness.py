@@ -22,11 +22,13 @@ from pathlib import Path
 
 import yaml
 
-import claude_wrapper
-from benchmark import get_model_short_name, load_results
+from . import claude_wrapper
+from .benchmark import get_model_short_name, load_results
+from .proposer_archive import write_proposer_archive
 
 EVOLVE_DIR = Path(__file__).parent
-CONFIG_PATH = EVOLVE_DIR / "config_k40.yaml"
+REPO_ROOT = EVOLVE_DIR.parent
+CONFIG_PATH = REPO_ROOT / "configs" / "config_k40.yaml"
 AGENTS_DIR = EVOLVE_DIR / "agents"
 BASELINE_FILES = {
     "__init__.py",
@@ -44,7 +46,7 @@ BASELINE_FILES = {
 }
 
 # These are updated per-run if --run-name is set
-LOGS_DIR = EVOLVE_DIR / "logs"
+LOGS_DIR = REPO_ROOT / "runs" / "logs"
 PENDING_EVAL = LOGS_DIR / "pending_eval.json"
 FRONTIER_VAL = LOGS_DIR / "frontier_val.json"
 EVOLUTION_SUMMARY = LOGS_DIR / "evolution_summary.jsonl"
@@ -67,6 +69,7 @@ PROPOSER_MODEL = os.environ.get("PROPOSER_MODEL", "claude-sonnet-4-6")
 # Active search space for the current run (set in run_evolve); recorded per
 # candidate in the ledger.
 _ACTIVE_SEARCH_SPACE = "full"
+_DEFAULT_PARENT = "aks"
 
 _interrupted = False
 
@@ -294,9 +297,25 @@ def recent_axes_union(k=3):
     return sorted(axes)
 
 
+def current_frontier_parent():
+    """Name of F_t for this iteration (dataset best_system, else aks)."""
+    if FRONTIER_VAL.exists():
+        try:
+            data = json.loads(FRONTIER_VAL.read_text())
+        except (json.JSONDecodeError, OSError):
+            data = {}
+        for key, val in data.items():
+            if str(key).startswith("_"):
+                continue
+            if isinstance(val, dict) and val.get("best_system"):
+                return str(val["best_system"])
+    return _DEFAULT_PARENT
+
+
 def render_task_prompt(iteration, num_datasets, search_space="full"):
     """Build the prompt for the proposer Claude session."""
     recent_axes = ", ".join(recent_axes_union()) or "(none yet)"
+    parent = current_frontier_parent()
     if search_space == "text_only":
         space_note = (
             "## SEARCH SPACE: TEXT-ONLY (controlled ablation)\n"
@@ -317,50 +336,39 @@ def render_task_prompt(iteration, num_datasets, search_space="full"):
             "embeddings, structured memory, and cross-modal retrieval routing "
             "(text->text / text->image / image->image / fusion). Prefer changing a "
             "fundamental mechanism over tuning constants.\n\n"
-            "## ARCHITECTURAL JUMP HINT (do NOT ignore)\n"
-            "If the current frontier system is a SINGLE-PASS uniform-frame system "
-            "with NO independent build_memory stage (i.e. it just samples frames "
-            "at answer time and dumps them into the VLM), then increment-only "
-            "mutations (adjusting frame density, tweaking prompts, adding a "
-            "verification pass) exhaust their headroom quickly. In that regime you "
-            "MUST also explore an ARCHITECTURAL BRANCH JUMP: at least ONE of your "
-            "3 candidates should introduce a full 'build_memory + retrieve + "
-            "answer' pipeline, where build_memory does a UNIFORM 320-frame ingest "
-            "and writes a persistent memory (textual captions, keyframe "
-            "embeddings, or a hybrid), and answer_question RETRIEVES from that "
-            "memory (embedding kNN / captioned keyword match / cross-modal "
-            "router) for questions that lack explicit timestamps. Reference "
-            "existing implementations of this pattern in agents/ (e.g. "
-            "hybrid_router_rag.py, dense_caption_text_rag.py, keyframe_image_rag.py, "
-            "episodic_narrative_memory.py) -- do NOT re-derive them; instead, "
-            "COMBINE their memory/retrieval mechanism with mechanisms proven to "
-            "work on the current frontier (e.g. temporal_redistribute's "
-            "timestamp-aware allocation for the SUBSET of questions that DO carry "
-            "explicit timestamps). Mark such a candidate axis=\"exploration\".\n\n"
         )
+    archive_path = write_proposer_archive(LOGS_DIR, AGENTS_DIR, parent=parent)
+    archive = archive_path.read_text()
     return (
         f"Run iteration {iteration} of the evolution loop. There are {num_datasets} datasets.\n\n"
         + space_note
         + f"## RECENT AXIS COVERAGE (last 3 iterations): {recent_axes}\n\n"
-        + "## INGEST POLICY (adaptive multi-pass)\n"
-        + "You are given ONLY the raw video (a VideoStream). The single HARD "
-        + "constraint is: a single VLM request may contain AT MOST 320 frames "
-        + "(the framework raises if you exceed it -- see render_frames). Within "
-        + "that cap, YOU decide the ingest rate, HOW MANY passes to sample, and "
-        + "HOW MANY frames per pass via self.sample_ingest_frames(video, fps=..., "
-        + "max_frames<=320). For long videos, prefer sampling in MULTIPLE passes "
-        + "and aggregating what you see into a memory (text summaries, keyframes, "
-        + "embeddings, or a hybrid) in build_memory, then answer from that memory "
-        + "-- rather than a single uniform dump that misses key moments. Do not "
-        + "use a fixed 32/48/64-frame pool as a default; small top-k values are "
-        + "answer-time only.\n\n"
-        + "You MUST satisfy the HARD EXPLORATION CONSTRAINT in SKILL.md: at least 1 of "
-        + "your 3 candidates must move an axis NOT in the above list, with axis=\"exploration\".\n\n"
+        + f"## CURRENT FRONTIER F_t: `{parent}`\n"
+        + "Parent is always this F_t. Copy `agents/"
+        + f"{parent}.py` and splice. Emit exactly 1 candidate.\n\n"
+        + "## ARCHIVE\n"
+        + "The pack below is historical harness source, scores, and traces. "
+        + "Use it. Truncated sections: Read the on-disk files. "
+        + f"Also written to `{archive_path}`.\n\n"
+        + archive
+        + "\n"
+        + "Write hypothesis H from the archive (and F_t traces) before editing source.\n\n"
+        + "## INGEST POLICY (per-request window)\n"
+        + "The HARD constraint is: a single VLM request may contain at most "
+        + "frame_budget() frames (K from config, else 320). render_frames "
+        + "raises if you exceed it. That is a per-call window, not an ingest "
+        + "pool. YOU decide fps, how many passes, and how many write-time "
+        + "frames. Do not treat a 320-frame ingest as mandatory.\n\n"
+        + "Emit exactly 1 candidate. The HARD EXPLORATION CONSTRAINT is optional "
+        + "this iteration; prefer an unused axis when it still improves the "
+        + "frontier, but one mechanism is enough.\n\n"
         + f"## Run directories\n"
         + f"All logs and results for this run are under `{LOGS_DIR}/`.\n"
         + f"- `{EVOLUTION_SUMMARY}` -- past results\n"
         + f"- `{FRONTIER_VAL}` -- frontier\n"
         + f"- `{LOGS_DIR / 'reports'}/` -- post-eval reports\n"
+        + f"- F_t val + traces: `{LOGS_DIR}/<dataset>/{parent}/<model>/val.json` "
+        + f"and `val_contexts.jsonl`\n"
         + f"- Write pending_eval.json to: `{PENDING_EVAL}`"
     )
 
@@ -395,7 +403,7 @@ def propose_claude(task_prompt, iteration, timeout=2400):
         prompt=task_prompt,
         model=PROPOSER_MODEL,
         allowed_tools=PROPOSER_ALLOWED_TOOLS,
-        skills=[str(EVOLVE_DIR / ".claude/skills/vl-harness")],
+        skills=[str(REPO_ROOT / "skills" / "vl-harness")],
         cwd=str(EVOLVE_DIR),
         log_dir=str(LOGS_DIR / "claude_sessions"),
         name=f"iter{iteration}",
@@ -711,7 +719,10 @@ def run_evolve(args):
         raise SystemExit("--test cannot be combined with run.fresh or --fresh")
     datasets = cfg["datasets"]
     search_space = cfg.get("search_space", "full")
-    candidate_concurrency = max(1, int(cfg.get("evolution", {}).get("candidate_concurrency", 1)))
+    evo = cfg.get("evolution", {}) or {}
+    candidate_concurrency = max(1, int(evo.get("candidate_concurrency", 1)))
+    num_candidates = max(1, int(evo.get("num_candidates", 1)))
+    os.environ["PROPOSER_NUM_CANDIDATES"] = str(num_candidates)
     global _ACTIVE_SEARCH_SPACE
     _ACTIVE_SEARCH_SPACE = search_space
 
@@ -729,7 +740,7 @@ def run_evolve(args):
         run_name = str(run_cfg["name"])
     else:
         run_name = datetime.now().strftime("%Y%m%d_%H%M%S")
-    LOGS_DIR = EVOLVE_DIR / "logs" / run_name
+    LOGS_DIR = REPO_ROOT / "runs" / "logs" / run_name
     PENDING_EVAL = LOGS_DIR / "pending_eval.json"
     FRONTIER_VAL = LOGS_DIR / "frontier_val.json"
     EVOLUTION_SUMMARY = LOGS_DIR / "evolution_summary.jsonl"
@@ -752,6 +763,8 @@ def run_evolve(args):
             raise SystemExit(
                 "text_only requires Phase 0 baselines without answer-time visual paths"
             )
+    global _DEFAULT_PARENT
+    _DEFAULT_PARENT = baselines[0] if baselines else "aks"
     if args.test:
         finalize_run(baselines, datasets, model_short, candidate_concurrency)
         return
@@ -771,7 +784,8 @@ def run_evolve(args):
     print(
         f"{_ts()} {_bold('Evolution (memory systems)')}  "
         f"run={_cyan(run_name)}  model={_cyan(args.model)}  "
-        f"iters={args.iterations}  datasets={datasets}  space={search_space}"
+        f"iters={args.iterations}  N={num_candidates}  conc={candidate_concurrency}  "
+        f"datasets={datasets}  space={search_space}"
     )
 
     # ── Phase 0: Baselines ─────────────────────────────────────
@@ -972,7 +986,8 @@ def main():
     args, remaining = parser.parse_known_args()
 
     global CONFIG_PATH
-    CONFIG_PATH = EVOLVE_DIR / args.config
+    _cfg_arg = Path(args.config)
+    CONFIG_PATH = _cfg_arg if _cfg_arg.is_absolute() else REPO_ROOT / "configs" / _cfg_arg
     os.environ["VL_HARNESS_CONFIG"] = str(CONFIG_PATH)
 
     with open(CONFIG_PATH) as f:

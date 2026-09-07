@@ -164,7 +164,7 @@ def _load_mlvu_annotations(split: str = "dev") -> list[dict]:
     if not path.exists():
         raise FileNotFoundError(
             f"MLVU annotations not found at {path}. Run:\n"
-            f"    python -m vl_harness.download_mlvu --source official --all-mcq"
+            f"    python scripts/download_mlvu.py --source official --all-mcq"
             + (" --include-test" if split == "test" else "")
         )
     with open(path) as f:
@@ -261,7 +261,7 @@ def _load_lvbench_annotations():
     if not path.exists():
         raise FileNotFoundError(
             f"LVBench annotations not found at {path}. Run:\n"
-            f"    python -m vl_harness.download_lvbench"
+            f"    python scripts/download_lvbench.py"
         )
     records = []
     with open(path) as f:
@@ -349,7 +349,7 @@ def _load_video_mme_annotations() -> list[dict]:
     if not path.exists():
         raise FileNotFoundError(
             f"Video-MME annotations not found at {path}. Run:\n"
-            f"    python -m vl_harness.download_video_mme"
+            f"    python scripts/download_video_mme.py"
         )
     with open(path) as f:
         return json.load(f)
@@ -418,7 +418,7 @@ def _load_mvbench_annotations() -> list[dict]:
     if not path.exists():
         raise FileNotFoundError(
             f"MVBench annotations not found at {path}. Run:\n"
-            f"    python -m vl_harness.download_mvbench"
+            f"    python scripts/download_mvbench.py"
         )
     with open(path) as f:
         return json.load(f)
@@ -493,6 +493,36 @@ _LOADERS: dict[str, Callable[[], list[dict]]] = {
     "mvbench": _mvbench_episodes,
 }
 
+_LVBENCH_QUESTION_SPLIT = (
+    Path(__file__).resolve().parent.parent / "manifests" / "lvbench_split_seed42.json"
+)
+
+
+def _lvbench_episode_id(ep: dict[str, Any]) -> str:
+    inp = ep.get("input")
+    if isinstance(inp, str):
+        try:
+            inp = json.loads(inp)
+        except json.JSONDecodeError:
+            inp = {}
+    if isinstance(inp, dict) and inp.get("episode_id"):
+        return str(inp["episode_id"])
+    meta = ep.get("meta") or {}
+    vid = meta.get("video_id")
+    qid = meta.get("question_id")
+    if vid and qid:
+        return f"{vid}_{qid}"
+    return str(qid or "")
+
+
+def _lvbench_question_split_enabled() -> bool:
+    raw = os.environ.get("LVBENCH_QUESTION_SPLIT", "").strip().lower()
+    if raw in {"0", "false", "off", "no"}:
+        return False
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    return _LVBENCH_QUESTION_SPLIT.is_file()
+
 
 def load_real_splits_3way(
     task: str,
@@ -508,6 +538,51 @@ def load_real_splits_3way(
             f"Real loader for '{task}' not implemented yet. Available: {sorted(_LOADERS)}"
         )
     pool = _LOADERS[task]()
+    if task == "lvbench" and _lvbench_question_split_enabled():
+        if not _LVBENCH_QUESTION_SPLIT.is_file():
+            raise RuntimeError(
+                f"LVBENCH_QUESTION_SPLIT is on but missing {_LVBENCH_QUESTION_SPLIT}"
+            )
+        man = json.loads(_LVBENCH_QUESTION_SPLIT.read_text())
+        by_id = {_lvbench_episode_id(ep): ep for ep in pool}
+
+        def _take(recs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            out: list[dict[str, Any]] = []
+            missing: list[str] = []
+            for rec in recs:
+                eid = str(rec.get("episode_id") or "")
+                ep = by_id.get(eid)
+                if ep is None:
+                    missing.append(eid)
+                else:
+                    out.append(ep)
+            if missing:
+                raise RuntimeError(
+                    f"lvbench question split missing {len(missing)} ids, "
+                    f"e.g. {missing[:4]}"
+                )
+            return out
+
+        val_full = _take(man.get("val") or [])
+        test_full = _take(man.get("test") or [])
+        train: list[dict[str, Any]] = []
+        if num_val <= 0:
+            val = []
+        else:
+            val = val_full[:num_val]
+        if num_test <= 0:
+            test = []
+        elif num_val <= 0 and num_test >= len(val_full) + len(test_full):
+            test = val_full + test_full
+        else:
+            test = test_full[:num_test]
+        print(
+            f"[split] lvbench pinned question-level seed=42 "
+            f"val={len(val)}q test={len(test)}q "
+            f"manifest={_LVBENCH_QUESTION_SPLIT.name}",
+            flush=True,
+        )
+        return train, val, test, get_evaluator(task)
     random.Random(shuffle_seed).shuffle(pool)
     total = num_train + num_val + num_test
     if total and total < len(pool):

@@ -22,7 +22,9 @@ Subclasses implement ``build_memory(video)`` and ``answer_question(memory, ...)`
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import os
 import re
 import threading
 from abc import ABC, abstractmethod
@@ -31,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from .video import Frame, VideoStream, _resize_long_side, load_video
-from .vlm import ContentParts, VLMCallable, frame_token_cost
+from .vlm import ContentParts, VLMCallable, as_pil_image, frame_token_cost
 
 _LETTERS = [chr(ord("A") + i) for i in range(26)]
 
@@ -324,16 +326,15 @@ class VideoMemoryHarness(ABC):
         fps: float | None = None,
         max_frames: int | None = None,
     ) -> list[Frame]:
-        """Sample the standard ingest pool at 2 fps, capped at 320 frames.
+        """Optional convenience: sample at 2 fps, default cap 320.
 
-        New harnesses should use this instead of fixed 32/64-frame uniform pools.
-        A specialized harness may pass explicit values only when its hypothesis
-        requires a different ingestion policy; answer-time top-k remains free.
+        This is a helper, not a required ingest policy. The hard constraint is
+        the per-request window in ``render_frames`` / ``frame_budget()``. How
+        many frames a harness ingests, and at what fps, is a search decision.
 
         At answer time an explicit ``max_frames`` is still clamped to
-        ``frame_budget()``, so a sweep arm binds every harness including ones
-        that hardcode 320. Inside ``build_memory`` it is not: that pool is the
-        write-time candidate set, which the budget does not govern.
+        ``frame_budget()``. Inside ``build_memory`` the cap is left alone so a
+        retrieval harness can embed a larger candidate pool and later pack K.
         """
         video.num_available()
         rate = fps if fps is not None else getattr(
@@ -354,13 +355,11 @@ class VideoMemoryHarness(ABC):
             target = video.num_available()
         return video.sample_uniform(max(1, min(target, int(cap))))
 
-    # Hard invariant: a single VLM request may include at most this many frames.
-    # This is a FRAMEWORK-LEVEL cap, not a suggestion: any harness that tries to
-    # push more frames into one request raises. Long videos must therefore be
-    # ingested over MULTIPLE passes (adaptive sampling + memory), which is the
-    # mechanism we want the evolution to discover -- rather than a single uniform
-    # dump that misses key frames. How many passes and how many frames per pass
-    # (<= this cap) is decided by the candidate harness / inner loop, not fixed.
+    # Hard invariant: a single VLM *request* may include at most this many
+    # frames when config does not set video.frame_budget. This is a per-call
+    # window, not an ingest-pool size. How many passes, fps, and write-time
+    # frames are search decisions. render_frames enforces frame_budget()
+    # (K=40 on the paper protocol).
     MAX_REQUEST_FRAMES = 320
 
     def render_frames(
@@ -377,9 +376,9 @@ class VideoMemoryHarness(ABC):
         In both cases the per-frame visual-token cost is added to the running
         answer cost, so the Pareto x-axis is consistent across backends.
 
-        Enforces the hard per-request frame cap (``MAX_REQUEST_FRAMES``): sending
-        more than the cap into a single VLM call raises, forcing multi-pass
-        ingestion + memory instead of one oversized uniform dump.
+        Enforces the per-request window ``frame_budget()`` (config K, else
+        ``MAX_REQUEST_FRAMES``). Sending more frames in one call raises. A
+        larger write-time pool is still allowed; split what you *show*.
 
         If ``timestamps=True``, each real frame is preceded by a ``[12.3s]``
         text part. Default is off so agents that already annotate time do not
@@ -406,14 +405,31 @@ class VideoMemoryHarness(ABC):
             if fr.raw_png is not None:
                 # Already-encoded PNG: hand it over as bytes so the client does
                 # not decode and re-compress every frame on the way out.
-                parts.append({"type": "image", "image": fr.raw_png, "size": fr.size})
+                parts.append(
+                    {
+                        "type": "image",
+                        "image": fr.raw_png,
+                        "size": fr.size,
+                        "_trace_frame": self._frame_trace_ref(fr),
+                        "_trace_raw_png": fr.raw_png,
+                    }
+                )
             elif fr.image is not None:
-                parts.append({"type": "image", "image": fr.image, "size": fr.size})
+                parts.append(
+                    {
+                        "type": "image",
+                        "image": fr.image,
+                        "size": fr.size,
+                        "_trace_frame": self._frame_trace_ref(fr),
+                        "_trace_raw_png": fr.raw_png,
+                    }
+                )
             else:
                 parts.append(
                     {
                         "type": "text",
                         "text": f"[frame@{fr.timestamp:.1f}s] {fr.caption or ''}",
+                        "_trace_frame": self._frame_trace_ref(fr),
                     }
                 )
             added_frames += 1
@@ -434,24 +450,182 @@ class VideoMemoryHarness(ABC):
         ) + added_tokens
         return parts
 
-    def ask_vlm(self, parts: ContentParts) -> str:
+    @staticmethod
+    def context_logging_enabled() -> bool:
+        """Write val_contexts.jsonl unless explicitly disabled.
+
+        Unset / empty → on. ``0`` / ``false`` / ``no`` / ``off`` → off.
+        """
+        raw = os.environ.get("VL_LOG_CONTEXT")
+        if raw is None or not str(raw).strip():
+            return True
+        return str(raw).strip().lower() not in {"0", "false", "no", "off"}
+
+    @staticmethod
+    def _frame_trace_ref(frame: Frame) -> dict[str, Any]:
+        ref: dict[str, Any] = {
+            "kind": "video_frame",
+            "frame_id": str(frame.index),
+            "index": int(frame.index),
+            "timestamp": round(float(frame.timestamp), 6),
+            "size": [int(frame.size[0]), int(frame.size[1])],
+        }
+        if frame.caption is not None:
+            ref["caption"] = frame.caption
+        provenance = getattr(frame, "provenance", None)
+        if provenance is not None:
+            ref["kind"] = str(provenance.get("kind") or "synthetic")
+            ref["provenance"] = provenance
+        return ref
+
+    def image_part(self, frame: Frame) -> dict[str, Any]:
+        """Image content part with the frame identity the context tracer needs."""
+        return {
+            "type": "image",
+            "image": frame.image,
+            "size": frame.size,
+            "_trace_frame": self._frame_trace_ref(frame),
+            "_trace_raw_png": frame.raw_png,
+        }
+
+    @staticmethod
+    def _image_digest(image: Any, raw_png: Any = None) -> tuple[str | None, str | None]:
+        """Hash the actual image bytes without embedding pixels in JSON."""
+        try:
+            if isinstance(raw_png, (bytes, bytearray)):
+                data, encoding = bytes(raw_png), "png"
+            elif isinstance(image, (bytes, bytearray)):
+                data, encoding = bytes(image), "bytes"
+            elif isinstance(image, (str, os.PathLike)):
+                data = open(image, "rb").read()
+                encoding = str(image).rsplit(".", 1)[-1].lower()
+            elif image is not None:
+                image = as_pil_image(image)
+                buf = io.BytesIO()
+                fmt = (getattr(image, "format", None) or "PNG").upper()
+                image.save(buf, format=fmt)
+                data, encoding = buf.getvalue(), fmt.lower()
+            else:
+                return None, None
+            return hashlib.sha256(data).hexdigest(), encoding
+        except Exception:
+            return None, None
+
+    def _serialize_context_parts(self, parts: ContentParts) -> list[dict[str, Any]]:
+        serialized: list[dict[str, Any]] = []
+        for pos, part in enumerate(parts):
+            typ = str(part.get("type") or "unknown")
+            item: dict[str, Any] = {"position": pos, "type": typ}
+            if typ == "text":
+                item["text"] = str(part.get("text") or "")
+                if part.get("_trace_frame") is not None:
+                    item["frame"] = part["_trace_frame"]
+            elif typ == "image":
+                image = part.get("image")
+                size = part.get("size") or getattr(image, "size", None)
+                if size:
+                    item["size"] = [int(size[0]), int(size[1])]
+                item["frame"] = part.get("_trace_frame") or {
+                    "kind": "unattributed_image"
+                }
+                digest, encoding = self._image_digest(
+                    image, part.get("_trace_raw_png")
+                )
+                if digest:
+                    item["image_sha256"] = digest
+                if encoding:
+                    item["image_encoding"] = encoding
+            elif typ == "video":
+                item["n_frames"] = int(
+                    part.get("_trace_n_frames")
+                    or len(part.get("images") or part.get("frame_list") or [])
+                )
+                size = part.get("size")
+                if size:
+                    item["size"] = [int(size[0]), int(size[1])]
+            else:
+                item["value"] = {
+                    str(k): str(v)
+                    for k, v in part.items()
+                    if k != "image" and not str(k).startswith("_trace_")
+                }
+            serialized.append(item)
+        return serialized
+
+    def _append_context_request(
+        self,
+        parts: ContentParts,
+        *,
+        phase: str,
+        response: str | None = None,
+        error: str | None = None,
+        reported_visual_tokens: int | None = None,
+        call_kwargs: dict[str, Any] | None = None,
+    ) -> None:
+        if not self.context_logging_enabled():
+            return
+        trace = getattr(self._local, "context_requests", None)
+        if trace is None:
+            trace = []
+            self._local.context_requests = trace
+        trace.append(
+            {
+                "request_index": len(trace),
+                "phase": phase,
+                "parts": self._serialize_context_parts(parts),
+                "text": "\n".join(
+                    str(p.get("text") or "")
+                    for p in parts
+                    if p.get("type") == "text"
+                ),
+                "num_images": sum(1 for p in parts if p.get("type") == "image"),
+                "num_videos": sum(1 for p in parts if p.get("type") == "video"),
+                "call_kwargs": call_kwargs or {},
+                "response": response,
+                "error": error,
+                "reported_visual_tokens": reported_visual_tokens,
+            }
+        )
+
+    def ask_vlm(self, parts: ContentParts, max_tokens: int | None = None) -> str:
         text = "\n".join(p.get("text", "") for p in parts if p.get("type") == "text")
         self._local.last_prompt_text = text
         self._local.last_prompt_len = len(text)
         self._local.last_prompt_hash = hashlib.md5(text.encode()).hexdigest()[:8]
-        resp = self._vlm(parts)
+        try:
+            if max_tokens is None:
+                resp = self._vlm(parts)
+            else:
+                try:
+                    resp = self._vlm(parts, max_tokens=max_tokens)
+                except TypeError:
+                    resp = self._vlm(parts)
+        except Exception as exc:
+            self._append_context_request(
+                parts,
+                phase="answer",
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            raise
         # If the backend reports REAL visual tokens for this call, accumulate them
         # (Pareto currency). StubVLM has no such method -> we keep the estimate.
+        reported_visual_tokens = None
         getter = getattr(self._vlm, "pop_last_visual_tokens", None)
         if getter is not None:
             rv = getter()
             if rv is not None:
+                reported_visual_tokens = int(rv)
                 self._local.last_real_visual_tokens = (
                     getattr(self._local, "last_real_visual_tokens", 0) or 0
-                ) + int(rv)
+                ) + reported_visual_tokens
                 self._local.has_real_visual_tokens = True
+        self._append_context_request(
+            parts,
+            phase="answer",
+            response=resp,
+            reported_visual_tokens=reported_visual_tokens,
+        )
         return resp
-    
 
     def caption_frame(self, frame: Frame, prompt: str | None = None) -> str:
         """Return a caption for a frame WITHOUT charging answer-time visual cost.
@@ -466,9 +640,24 @@ class VideoMemoryHarness(ABC):
                 "type": "text",
                 "text": prompt or "Describe this video frame in one factual sentence.",
             },
-            {"type": "image", "image": frame.image, "size": frame.size},
+            {
+                "type": "image",
+                "image": frame.image,
+                "size": frame.size,
+                "_trace_frame": self._frame_trace_ref(frame),
+                "_trace_raw_png": frame.raw_png,
+            },
         ]
-        resp = self._vlm(parts)
+        try:
+            resp = self._vlm(parts)
+        except Exception as exc:
+            self._append_context_request(
+                parts,
+                phase="ingest",
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            raise
+        self._append_context_request(parts, phase="ingest", response=resp)
         return extract_json_field(resp, "final_answer") or resp
 
     # Captioning a 320-frame ingest pool one request per frame dominates
@@ -511,6 +700,10 @@ class VideoMemoryHarness(ABC):
             else getattr(self, "CAPTION_TARGET_SIDE", 336)
         )
         workers = max_workers or getattr(self, "CAPTION_MAX_WORKERS", 4)
+        # Thread-local request traces cannot be safely merged from nested
+        # caption workers while question-level evaluation is also parallel.
+        if self.context_logging_enabled():
+            workers = 1
         base_prompt = prompt or "Describe this video frame in one factual sentence."
 
         captions: list[str | None] = [f.caption for f in frames]
@@ -543,6 +736,7 @@ class VideoMemoryHarness(ABC):
                         "type": "image",
                         "image": _downscale_for_caption(fr.image, side),
                         "size": fr.size,
+                        "_trace_frame": self._frame_trace_ref(fr),
                     }
                 )
             # Budget generously: a truncated reply fails to parse and costs k
@@ -572,9 +766,24 @@ class VideoMemoryHarness(ABC):
         the real client's signature.
         """
         try:
-            return self._vlm(parts, enable_thinking=False, max_tokens=max_tokens)
+            resp = self._vlm(parts, enable_thinking=False, max_tokens=max_tokens)
         except TypeError:
-            return self._vlm(parts)
+            resp = self._vlm(parts)
+        except Exception as exc:
+            self._append_context_request(
+                parts,
+                phase="ingest",
+                error=f"{type(exc).__name__}: {exc}",
+                call_kwargs={"enable_thinking": False, "max_tokens": max_tokens},
+            )
+            raise
+        self._append_context_request(
+            parts,
+            phase="ingest",
+            response=resp,
+            call_kwargs={"enable_thinking": False, "max_tokens": max_tokens},
+        )
+        return resp
 
     # -- embedding / retrieval helpers -----------------------------------
     def embed_texts(self, texts: list[str]):
@@ -615,6 +824,7 @@ class VideoMemoryHarness(ABC):
         self._local.last_real_visual_tokens = 0
         self._local.has_real_visual_tokens = False
         self._local.last_frame_times = []
+        self._local.context_requests = []
     
     # ── (input, target) contract used by inner_loop ─────────────────────
     def predict(self, input: str) -> tuple[str, dict[str, Any]]:
@@ -624,6 +834,9 @@ class VideoMemoryHarness(ABC):
         # in benchmark metadata (the oracle arm) can, without widening the
         # answer_question signature for everyone else.
         self._local.episode_id = ep.get("episode_id")
+        self._local.video_ref = ep.get("video_ref")
+        self._local.question = ep.get("question")
+        self._local.options = list(ep.get("options") or [])
         memory = self._get_memory(ep)
         letter, meta = self.answer_question(
             memory, ep["question"], ep["options"]
@@ -695,6 +908,13 @@ class VideoMemoryHarness(ABC):
             "visual_tokens_estimate": est,
             "num_frames": getattr(self._local, "last_num_frames", 0),
             "frame_times": list(getattr(self._local, "last_frame_times", []) or []),
+            "episode_id": getattr(self._local, "episode_id", None),
+            "video_ref": getattr(self._local, "video_ref", None),
+            "question": getattr(self._local, "question", None),
+            "options": list(getattr(self._local, "options", []) or []),
+            "context_requests": list(
+                getattr(self._local, "context_requests", []) or []
+            ),
         }
     
     def get_visual_cost(self) -> dict[str, Any]:

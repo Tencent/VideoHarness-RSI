@@ -17,4 +17,4 @@ dependencies = [
 package = false
 
 [tool.ruff]
-exclude = ["agents"]
+exclude = ["vl_harness/agents"]

@@ -7,8 +7,8 @@ content is a list of ``{"type":"text"}`` / ``{"type":"image_url"}`` parts, where
 image_url is a base64 data URL (what ``vlm.VLM`` sends).
 
 Run:
-    python -m vl_harness.serve_qwenvl --port 8000
-    # or:  VL_MODEL_PATH=/path/to/model python -m vl_harness.serve_qwenvl
+    python scripts/serve_qwenvl.py --port 8000
+    # or:  VL_MODEL_PATH=/path/to/model python scripts/serve_qwenvl.py
 
 Notes:
 - Defaults to the modelscope snapshot of Qwen3-VL-4B-Instruct.

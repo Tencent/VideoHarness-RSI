@@ -1,7 +1,9 @@
 """Inner Loop: Online and offline training with memory systems."""
 
+import hashlib
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -85,6 +87,132 @@ def compute_micro_f1(predictions: list[dict]) -> float:
     if precision + recall == 0:
         return 0.0
     return 2 * precision * recall / (precision + recall)
+
+
+def _source_fingerprint(memory_path: str) -> tuple[str | None, str | None]:
+    """Return resolved harness source and hash for replay provenance."""
+    stem = Path(memory_path).stem
+    candidates = [Path(memory_path)]
+    here = Path(__file__).parent
+    repo = here.parent
+    if not Path(memory_path).is_absolute():
+        candidates.append(repo / memory_path)
+        candidates.append(here / memory_path)
+    candidates.append(here / "agents" / f"{stem}.py")
+    for path in candidates:
+        if path.is_file():
+            resolved = path.resolve()
+            return str(resolved), hashlib.sha256(resolved.read_bytes()).hexdigest()
+    return None, None
+
+
+def _run_id_from_output(path: Path, dataset: str) -> str:
+    """Recover logs/<run_id>/<dataset>/... from a normal benchmark path."""
+    parts = path.resolve().parts
+    positions = [i for i, p in enumerate(parts) if p == dataset]
+    logs_positions = [i for i, p in enumerate(parts) if p == "logs"]
+    if positions and logs_positions:
+        di = positions[-1]
+        li = max((i for i in logs_positions if i < di), default=-1)
+        if li >= 0:
+            return "/".join(parts[li + 1 : di])
+    return path.parent.parent.parent.name
+
+
+def _resolve_config_path() -> Path:
+    raw = os.environ.get("VL_HARNESS_CONFIG", "config_k40.yaml")
+    p = Path(raw)
+    if p.is_file():
+        return p.resolve()
+    here = Path(__file__).parent
+    repo = here.parent
+    for cand in (repo / raw, repo / "configs" / Path(raw).name, here / raw):
+        if cand.is_file():
+            return cand.resolve()
+    return p
+
+
+def write_context_sidecar(
+    output_path: str,
+    preds: list[dict[str, Any]],
+    *,
+    dataset: str,
+    memory_path: str,
+    model: str,
+    frame_budget: int | None,
+    seed: int,
+) -> Path:
+    """Write one complete, independently readable context record per question."""
+    out = Path(output_path)
+    sidecar = out.with_name(f"{out.stem}_contexts.jsonl")
+    source_path, source_sha256 = _source_fingerprint(memory_path)
+    harness_id = Path(memory_path).stem
+    match = re.search(r"_iter(\d+)$", harness_id)
+    iteration = int(match.group(1)) if match else None
+    run_id = _run_id_from_output(out, dataset)
+    config_path = _resolve_config_path()
+    config_sha256 = (
+        hashlib.sha256(config_path.read_bytes()).hexdigest()
+        if config_path.is_file()
+        else None
+    )
+
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    incomplete: list[str] = []
+    with sidecar.open("w") as f:
+        for pred in preds:
+            context = dict(pred.get("context_record") or {})
+            requests = context.get("requests") or []
+            unattributed = sum(
+                1
+                for req in requests
+                for part in (req.get("parts") or [])
+                if part.get("type") == "image"
+                and (part.get("frame") or {}).get("kind") == "unattributed_image"
+            )
+            request_errors = sum(1 for req in requests if req.get("error"))
+            record = {
+                "trace_schema_version": 1,
+                "question_id": context.get("question_id"),
+                "episode_index": context.get("episode_index"),
+                "run_id": run_id,
+                "iteration": iteration,
+                "harness_id": harness_id,
+                "harness_source": source_path,
+                "harness_source_sha256": source_sha256,
+                "config_path": str(config_path.resolve())
+                if config_path.exists()
+                else str(config_path),
+                "config_sha256": config_sha256,
+                "dataset": dataset,
+                "model": model,
+                "K": frame_budget,
+                "seed": seed,
+                "video_ref": context.get("video_ref"),
+                "question": context.get("question"),
+                "options": context.get("options") or [],
+                "num_requests": len(requests),
+                "requests": requests,
+                "final_prediction": pred.get("prediction"),
+                "target": pred.get("target"),
+                "was_correct": pred.get("was_correct"),
+                "parse_fail": pred.get("parse_fail"),
+                "trace_complete": bool(requests)
+                and unattributed == 0
+                and request_errors == 0,
+                "unattributed_images": unattributed,
+                "request_errors": request_errors,
+            }
+            if not record["trace_complete"]:
+                incomplete.append(str(record.get("question_id")))
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    if incomplete:
+        sample = ", ".join(incomplete[:5])
+        raise RuntimeError(
+            f"context trace gate failed for {len(incomplete)} question(s) "
+            f"in {sidecar}; sample: {sample}"
+        )
+    return sidecar
 
 
 def make_result(preds: list[dict]) -> dict:
@@ -458,6 +586,7 @@ def evaluate_memory(
     max_workers: int = 32,
 ) -> dict[str, Any]:
     """Evaluate without updating (parallel)."""
+    log_context = MemorySystem.context_logging_enabled()
     if not examples:
         return {
             "accuracy": 0.0,
@@ -492,6 +621,27 @@ def evaluate_memory(
             "parse_fail": bool(meta.get("parse_fail", pred == "?")),
             "raw_response": meta.get("raw"),
         }
+        if log_context:
+            try:
+                episode = json.loads(ex["input"])
+            except (TypeError, json.JSONDecodeError):
+                episode = {}
+            requests = prompt_info.get("context_requests") or []
+            result["context_record"] = {
+                "question_id": prompt_info.get("episode_id")
+                or episode.get("episode_id")
+                or f"index:{idx}",
+                "episode_index": idx,
+                "video_ref": prompt_info.get("video_ref")
+                or episode.get("video_ref"),
+                "question": prompt_info.get("question")
+                or episode.get("question"),
+                "options": prompt_info.get("options")
+                or episode.get("options")
+                or [],
+                "num_requests": len(requests),
+                "requests": requests,
+            }
         # Did the model ever see the moment the answer is annotated to live in?
         # Recorded per question so any run can be stratified by evidence
         # visibility and by how wide the annotation is, without re-running.
@@ -565,8 +715,8 @@ def load_memory_system(
     """Load a video-memory harness from a file path.
 
     Accepts paths like:
-    - 'agents/uniform_frames_no_memory.py'
-    - 'agents/my_candidate.py'
+    - 'vl_harness/agents/uniform_frames_no_memory.py' (repo-root-relative)
+    - 'agents/my_candidate.py' (package-relative, legacy)
     - 'uniform_frames_no_memory' (searches agents/)
     """
     import importlib
@@ -582,6 +732,10 @@ def load_memory_system(
             raise ValueError(f"Harness '{path}' not found in agents") from None
 
     module_path = path.replace("/", ".").replace(".py", "")
+    # Accept both repo-root-relative ('vl_harness/agents/x.py') and
+    # package-relative ('agents/x.py') paths; import_module adds the package.
+    if module_path.startswith("vl_harness."):
+        module_path = module_path[len("vl_harness."):]
     module = importlib.import_module(f".{module_path}", package="vl_harness")
 
     # getmembers sorts by name, so a harness that subclasses another one silently
@@ -620,7 +774,7 @@ def load_config() -> dict:
 
     config_path = Path(os.environ.get("VL_HARNESS_CONFIG", "config_k40.yaml"))
     if not config_path.is_absolute():
-        config_path = Path(__file__).parent / config_path
+        config_path = Path(__file__).parent.parent / "configs" / config_path
     with open(config_path) as f:
         return yaml.safe_load(f)
 
@@ -1069,10 +1223,32 @@ if __name__ == "__main__":
         with open(args.val_output, "w") as f:
             json.dump(_build_output(val_result, val_preds), f, indent=2)
         print(f"Saved val results to {args.val_output}", flush=True)
+        if MemorySystem.context_logging_enabled():
+            context_path = write_context_sidecar(
+                args.val_output,
+                val_preds,
+                dataset=args.dataset,
+                memory_path=args.memory,
+                model=model,
+                frame_budget=memory.frame_budget(),
+                seed=args.seed,
+            )
+            print(f"Saved val contexts to {context_path}", flush=True)
 
     if args.test_output and test_result:
         Path(args.test_output).parent.mkdir(parents=True, exist_ok=True)
         with open(args.test_output, "w") as f:
             json.dump(_build_output(test_result, test_preds), f, indent=2)
         print(f"Saved test results to {args.test_output}", flush=True)
+        if MemorySystem.context_logging_enabled():
+            context_path = write_context_sidecar(
+                args.test_output,
+                test_preds,
+                dataset=args.dataset,
+                memory_path=args.memory,
+                model=model,
+                frame_budget=memory.frame_budget(),
+                seed=args.seed,
+            )
+            print(f"Saved test contexts to {context_path}", flush=True)
 

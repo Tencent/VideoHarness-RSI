@@ -44,6 +44,9 @@ class Frame:
     # answer path skip a per-frame PNG compression -- 1009 of them per question
     # at the report budget, which profiling showed to be the dominant cost.
     raw_png: Any = None
+    # Optional derivation record for synthetic images (survey grids, etc.).
+    # Plain decoded frames leave this unset. Does not change pixels or scoring.
+    provenance: dict[str, Any] | None = None
 
     def to_image_part(self, tokens: int | None = None) -> dict[str, Any]:
         """Render as a vlm content 'image' part (token cost from size)."""
