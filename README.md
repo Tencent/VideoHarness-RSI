@@ -12,7 +12,9 @@ construction as its own optimization layer**.
 Frozen VLM  +  evolvable VideoMemoryHarness  →  accuracy (optional cost Pareto)
 ```
 
-![VideoHarness-RSI overview](figures/vl-harness.png)
+<p align="center">
+  <img src="figures/vl-harness.png" alt="VideoHarness-RSI overview" width="640" />
+</p>
 
 ---
 
@@ -45,7 +47,9 @@ Exact counts: [`paper/scores.json`](paper/scores.json). Default protocol:
 **K=40**, LVBench **val 350 / held-out 882**, seed **42**, temperature **0**
 ([`configs/config_k40.yaml`](configs/config_k40.yaml)).
 
-![Search frontier from AKS to CardinalityLedger](figures/fig_search_frontier.png)
+<p align="center">
+  <img src="figures/fig_search_frontier.png" alt="Search frontier from AKS to CardinalityLedger" width="640" />
+</p>
 
 *Accepted updates (StatedInterval → SurveyCommit → PointerLadder → CardinalityLedger)
 move the dev-350 frontier; gray points are evaluated programs that did not replace it.
