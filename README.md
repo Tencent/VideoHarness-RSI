@@ -1,4 +1,4 @@
-# VL-Harness-RSI
+# VideoHarness-RSI
 
 **Search the executable context-construction program around a *frozen* long-video VLM.**
 
